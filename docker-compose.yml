@@ -1,0 +1,18 @@
+services:
+  channel-plugin:
+    build: .
+    image: channel-plugin:latest
+    container_name: channel-plugin
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - CHANNEL_MASTER_KEY=${CHANNEL_MASTER_KEY}
+      - CHANNEL_HTTP_ADDR=:8080
+      - CHANNEL_SQLITE_PATH=/app/data/channel.db
+      - WECHAT_REFERENCE_BASE_URL=${WECHAT_REFERENCE_BASE_URL:-http://localhost:9090}
+    volumes:
+      - channel-data:/app/data
+
+volumes:
+  channel-data:
