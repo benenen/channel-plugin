@@ -205,7 +205,6 @@ Suggested fields:
 - `account_uid`
 - `display_name`
 - `avatar_url`
-- `bind_status`
 - `credential_ciphertext`
 - `credential_version`
 - `last_bound_at`
@@ -218,6 +217,11 @@ Constraints:
 - `channel_type` initially supports only `wechat`
 
 For WeChat, `account_uid` stores the stable account identifier obtained from the provider.
+
+MVP note:
+
+- `channel_accounts` does not store a separate `bind_status`
+- current account usability is derived from whether a credential payload exists and whether the latest successful binding completed
 
 ### `channel_bindings`
 
@@ -338,6 +342,8 @@ If the provider cannot initialize the binding, the endpoint returns an error env
 
 `GET /api/v1/channel-bindings/detail?binding_id=bind_xxx`
 
+This endpoint is not a pure database read in MVP. Each call refreshes provider state using `provider_binding_ref`, persists any state change, and then returns the latest stored view. Polling clients should treat this endpoint as the authoritative refresh path.
+
 Response data:
 
 - `binding_id`
@@ -386,7 +392,7 @@ Response data:
 
 `POST /api/v1/channel-accounts/app-key/disable`
 
-Request body supports either `channel_account_id` or `key_id`.
+Request body supports either `channel_account_id` or `key_id`, but not both. If both are provided, return `INVALID_ARGUMENT`.
 
 This keeps the API within the `GET`/`POST` constraint while still allowing explicit key revocation.
 
@@ -408,6 +414,14 @@ Response data:
 
 `credential_blob` is the minimal provider-specific credential package the plugin needs to start its own WeChat runtime. Internal management fields must not be returned.
 
+`RuntimeConfig` for MVP maps to the HTTP response as:
+
+- `credential_blob.version`: integer schema version for the runtime credential contract
+- `credential_blob.payload`: provider-specific JSON object, not opaque base64
+- `runtime_options`: JSON object for non-secret runtime hints such as poll intervals
+
+For WeChat MVP, `BuildRuntimeConfig` returns a structure that can be serialized directly into this response shape.
+
 Example success response:
 
 ```json
@@ -421,7 +435,10 @@ Example success response:
     "account_uid": "wxid_xxx",
     "credential_blob": {
       "version": 1,
-      "payload": "base64-or-json-provider-data"
+      "payload": {
+        "wechat_session": {},
+        "device": {}
+      }
     },
     "runtime_options": {
       "poll_interval_seconds": 3
