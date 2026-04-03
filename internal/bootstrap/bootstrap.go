@@ -4,6 +4,7 @@ import (
 	stdhttp "net/http"
 
 	"github.com/benenen/channel-plugin/internal/api/http/handlers"
+	"github.com/benenen/channel-plugin/internal/api/http/web"
 	"github.com/benenen/channel-plugin/internal/app"
 	"github.com/benenen/channel-plugin/internal/channel/wechat"
 	"github.com/benenen/channel-plugin/internal/config"
@@ -56,6 +57,9 @@ func New(cfg config.Config) (*App, error) {
 		w.WriteHeader(stdhttp.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	// Web admin UI
+	mux.Handle("/", web.Handler())
 
 	handlers.RegisterRoutes(mux, handlers.Dependencies{
 		BindingService:      bindingSvc,

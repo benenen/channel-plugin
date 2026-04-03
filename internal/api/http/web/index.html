@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Channel Plugin Admin</title>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --card: #fff;
+  --border: #e2e8f0;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --text: #1e293b;
+  --text-secondary: #64748b;
+  --radius: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+header { background: var(--primary); color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 20px; font-weight: 600; }
+header span { font-size: 13px; opacity: 0.8; }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--card); border-radius: var(--radius); padding: 4px; border: 1px solid var(--border); }
+.tab { padding: 10px 20px; border: none; background: none; cursor: pointer; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: all .15s; }
+.tab.active { background: var(--primary); color: #fff; }
+.tab:hover:not(.active) { background: #f1f5f9; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.card h3 { font-size: 16px; margin-bottom: 12px; }
+
+.form-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; flex-wrap: wrap; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
+.form-group input, .form-group select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; min-width: 200px; }
+.form-group input:focus, .form-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+
+button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-secondary); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #f8fafc; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.badge-success { background: #dcfce7; color: #166534; }
+.badge-warning { background: #fef9c3; color: #854d0e; }
+.badge-danger { background: #fee2e2; color: #991b1b; }
+.badge-info { background: #e0e7ff; color: #3730a3; }
+.badge-neutral { background: #f1f5f9; color: #475569; }
+
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: var(--radius); color: #fff; font-size: 14px; z-index: 1000; animation: slideIn .3s ease; }
+.toast-success { background: var(--success); }
+.toast-error { background: var(--danger); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.empty { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--card); border-radius: var(--radius); padding: 24px; min-width: 400px; max-width: 90vw; }
+.modal h3 { margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+.key-display { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 13px; word-break: break-all; margin: 12px 0; user-select: all; }
+
+.qr-section { text-align: center; padding: 20px; }
+.qr-payload { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; margin: 12px 0; }
+.poll-status { margin-top: 12px; font-size: 14px; }
+
+.stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; flex: 1; min-width: 150px; }
+.stat-card .number { font-size: 28px; font-weight: 700; color: var(--primary); }
+.stat-card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Channel Plugin</h1>
+  <span>Management Console</span>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('bindings')">Bindings</button>
+    <button class="tab" onclick="switchTab('accounts')">Channel Accounts</button>
+    <button class="tab" onclick="switchTab('appkeys')">App Keys</button>
+  </div>
+
+  <!-- Bindings Panel -->
+  <div id="panel-bindings" class="panel active">
+    <div class="card">
+      <h3>Create New Binding</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>User ID</label>
+          <input type="text" id="bind-user-id" placeholder="e.g. u_123">
+        </div>
+        <div class="form-group">
+          <label>Channel Type</label>
+          <select id="bind-channel-type">
+            <option value="wechat">WeChat</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="createBinding()">Create Binding</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Binding Sessions</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Binding ID</label>
+          <input type="text" id="query-binding-id" placeholder="e.g. bind_xxx">
+        </div>
+        <button class="btn-primary" onclick="queryBinding()">Query</button>
+      </div>
+      <div id="binding-result"></div>
+    </div>
+  </div>
+
+  <!-- Accounts Panel -->
+  <div id="panel-accounts" class="panel">
+    <div class="card">
+      <h3>List Channel Accounts</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>User ID</label>
+          <input type="text" id="acct-user-id" placeholder="e.g. u_123">
+        </div>
+        <div class="form-group">
+          <label>Channel Type</label>
+          <select id="acct-channel-type">
+            <option value="">All</option>
+            <option value="wechat">WeChat</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="listAccounts()">Search</button>
+      </div>
+      <table id="accounts-table" style="display:none">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Channel</th>
+            <th>Account UID</th>
+            <th>Display Name</th>
+            <th>App Key</th>
+            <th>Last Bound</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="accounts-body"></tbody>
+      </table>
+      <div id="accounts-empty" class="empty" style="display:none">No accounts found</div>
+    </div>
+  </div>
+
+  <!-- App Keys Panel -->
+  <div id="panel-appkeys" class="panel">
+    <div class="card">
+      <h3>Generate App Key</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Channel Account ID</label>
+          <input type="text" id="appkey-acct-id" placeholder="e.g. acct_xxx">
+        </div>
+        <button class="btn-primary" onclick="createAppKey()">Generate / Rotate</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Disable App Key</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Channel Account ID or Key ID</label>
+          <input type="text" id="disable-id" placeholder="acct_xxx or key_xxx">
+        </div>
+        <button class="btn-danger" onclick="disableAppKey()">Disable</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Test Runtime Config</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>App Key</label>
+          <input type="text" id="test-appkey" placeholder="appk_xxx">
+        </div>
+        <button class="btn-primary" onclick="testRuntimeConfig()">Fetch Config</button>
+      </div>
+      <div id="runtime-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div class="modal-overlay" id="qr-modal">
+  <div class="modal">
+    <h3>Scan QR Code</h3>
+    <div class="qr-section">
+      <p>Use WeChat to scan the following QR code payload:</p>
+      <div class="qr-payload" id="qr-payload"></div>
+      <div>Expires: <span id="qr-expires"></span></div>
+      <div class="poll-status">
+        Status: <span class="badge badge-info" id="qr-status">Polling...</span>
+      </div>
+      <div id="qr-account-info" style="display:none; margin-top:12px;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-danger" onclick="closeQRModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- App Key Modal -->
+<div class="modal-overlay" id="appkey-modal">
+  <div class="modal">
+    <h3>App Key Generated</h3>
+    <p style="color:var(--danger);font-weight:600;font-size:13px;">⚠ This key will only be shown once. Copy it now!</p>
+    <div class="key-display" id="appkey-display"></div>
+    <div style="font-size:13px;color:var(--text-secondary);">
+      <div>Key ID: <span id="appkey-id"></span></div>
+      <div>Prefix: <span id="appkey-prefix"></span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="copyAppKey()">Copy Key</button>
+      <button onclick="closeAppKeyModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api/v1';
+let pollTimer = null;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+function toast(msg, type) {
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function statusBadge(status) {
+  const map = {
+    'qr_ready': 'info', 'confirmed': 'success', 'failed': 'danger',
+    'expired': 'warning', 'pending': 'neutral', 'active': 'success', 'disabled': 'danger'
+  };
+  return `<span class="badge badge-${map[status] || 'neutral'}">${status}</span>`;
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(API + path, opts);
+  return res.json();
+}
+
+async function apiWithHeader(path, headers) {
+  const res = await fetch(API + path, { headers });
+  return res.json();
+}
+
+// === Bindings ===
+
+async function createBinding() {
+  const userId = document.getElementById('bind-user-id').value.trim();
+  const channelType = document.getElementById('bind-channel-type').value;
+  if (!userId) { toast('User ID is required', 'error'); return; }
+
+  const data = await api('POST', '/channel-bindings/create', { user_id: userId, channel_type: channelType });
+  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
+
+  toast('Binding created', 'success');
+  showQRModal(data.data);
+}
+
+function showQRModal(binding) {
+  document.getElementById('qr-payload').textContent = binding.qr_code_payload;
+  document.getElementById('qr-expires').textContent = binding.expires_at ? new Date(binding.expires_at).toLocaleString() : 'N/A';
+  document.getElementById('qr-status').textContent = binding.status;
+  document.getElementById('qr-status').className = 'badge badge-info';
+  document.getElementById('qr-account-info').style.display = 'none';
+  document.getElementById('qr-modal').classList.add('active');
+
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => pollBinding(binding.binding_id), 3000);
+}
+
+async function pollBinding(bindingId) {
+  const data = await api('GET', '/channel-bindings/detail?binding_id=' + bindingId);
+  if (data.code !== 'OK') return;
+
+  const b = data.data;
+  const statusEl = document.getElementById('qr-status');
+  statusEl.innerHTML = statusBadge(b.status);
+
+  if (b.status === 'confirmed') {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    const info = document.getElementById('qr-account-info');
+    info.style.display = 'block';
+    info.innerHTML = `<strong>Binding confirmed!</strong><br>Account: ${b.channel_account_id || ''}<br>UID: ${b.account_uid || ''}`;
+    toast('Binding confirmed!', 'success');
+  } else if (b.status === 'failed' || b.status === 'expired') {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    toast('Binding ' + b.status, 'error');
+  }
+}
+
+function closeQRModal() {
+  document.getElementById('qr-modal').classList.remove('active');
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function queryBinding() {
+  const id = document.getElementById('query-binding-id').value.trim();
+  if (!id) { toast('Binding ID is required', 'error'); return; }
+
+  const data = await api('GET', '/channel-bindings/detail?binding_id=' + id);
+  const el = document.getElementById('binding-result');
+  if (data.code !== 'OK') {
+    el.innerHTML = `<div style="margin-top:12px;color:var(--danger)">${data.code}: ${data.message}</div>`;
+    return;
+  }
+  const b = data.data;
+  el.innerHTML = `
+    <table style="margin-top:12px">
+      <tr><td><strong>Binding ID</strong></td><td>${b.binding_id}</td></tr>
+      <tr><td><strong>Status</strong></td><td>${statusBadge(b.status)}</td></tr>
+      <tr><td><strong>Channel</strong></td><td>${b.channel_type}</td></tr>
+      <tr><td><strong>Account ID</strong></td><td>${b.channel_account_id || '-'}</td></tr>
+      <tr><td><strong>Account UID</strong></td><td>${b.account_uid || '-'}</td></tr>
+      <tr><td><strong>Expires</strong></td><td>${b.expires_at ? new Date(b.expires_at).toLocaleString() : '-'}</td></tr>
+      <tr><td><strong>Error</strong></td><td>${b.error_message || '-'}</td></tr>
+    </table>`;
+}
+
+// === Accounts ===
+
+async function listAccounts() {
+  const userId = document.getElementById('acct-user-id').value.trim();
+  if (!userId) { toast('User ID is required', 'error'); return; }
+  const channelType = document.getElementById('acct-channel-type').value;
+
+  let path = '/channel-accounts/list?user_id=' + encodeURIComponent(userId);
+  if (channelType) path += '&channel_type=' + channelType;
+
+  const data = await api('GET', path);
+  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
+
+  const items = data.data || [];
+  const table = document.getElementById('accounts-table');
+  const empty = document.getElementById('accounts-empty');
+  const body = document.getElementById('accounts-body');
+
+  if (items.length === 0) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  empty.style.display = 'none';
+  body.innerHTML = items.map(a => `
+    <tr>
+      <td><code>${a.id}</code></td>
+      <td>${a.channel_type}</td>
+      <td>${a.account_uid}</td>
+      <td>${a.display_name || '-'}</td>
+      <td>${a.has_active_app_key ? statusBadge('active') : statusBadge('disabled')}</td>
+      <td>${a.last_bound_at ? new Date(a.last_bound_at).toLocaleString() : '-'}</td>
+      <td>
+        <button class="btn-primary btn-sm" onclick="createAppKeyFor('${a.id}')">Gen Key</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function createAppKeyFor(acctId) {
+  document.getElementById('appkey-acct-id').value = acctId;
+  switchTab('appkeys');
+  createAppKey();
+}
+
+// === App Keys ===
+
+async function createAppKey() {
+  const acctId = document.getElementById('appkey-acct-id').value.trim();
+  if (!acctId) { toast('Channel Account ID is required', 'error'); return; }
+
+  const data = await api('POST', '/channel-accounts/app-key/create', { channel_account_id: acctId });
+  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
+
+  document.getElementById('appkey-display').textContent = data.data.app_key;
+  document.getElementById('appkey-id').textContent = data.data.key_id;
+  document.getElementById('appkey-prefix').textContent = data.data.app_key_prefix;
+  document.getElementById('appkey-modal').classList.add('active');
+  toast('App key generated', 'success');
+}
+
+function copyAppKey() {
+  const key = document.getElementById('appkey-display').textContent;
+  navigator.clipboard.writeText(key).then(() => toast('Copied!', 'success'));
+}
+
+function closeAppKeyModal() {
+  document.getElementById('appkey-modal').classList.remove('active');
+}
+
+async function disableAppKey() {
+  const id = document.getElementById('disable-id').value.trim();
+  if (!id) { toast('ID is required', 'error'); return; }
+
+  const body = id.startsWith('key_') ? { key_id: id } : { channel_account_id: id };
+  const data = await api('POST', '/channel-accounts/app-key/disable', body);
+  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
+  toast('App key disabled', 'success');
+}
+
+async function testRuntimeConfig() {
+  const key = document.getElementById('test-appkey').value.trim();
+  if (!key) { toast('App Key is required', 'error'); return; }
+
+  const data = await apiWithHeader('/runtime/config', { 'X-App-Key': key });
+  const el = document.getElementById('runtime-result');
+  if (data.code !== 'OK') {
+    el.innerHTML = `<div style="margin-top:12px;color:var(--danger)">${data.code}: ${data.message}</div>`;
+    return;
+  }
+  el.innerHTML = `<pre style="margin-top:12px;background:#f1f5f9;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto">${JSON.stringify(data.data, null, 2)}</pre>`;
+}
+</script>
+</body>
+</html>
