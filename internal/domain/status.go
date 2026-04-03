@@ -1,0 +1,9 @@
+package domain
+
+const (
+	BindingStatusPending   = "pending"
+	BindingStatusQRReady   = "qr_ready"
+	BindingStatusConfirmed = "confirmed"
+	BindingStatusFailed    = "failed"
+	BindingStatusExpired   = "expired"
+)
