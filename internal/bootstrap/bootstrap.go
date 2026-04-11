@@ -3,14 +3,14 @@ package bootstrap
 import (
 	stdhttp "net/http"
 
-	"github.com/benenen/channel-plugin/internal/api/http/handlers"
-	"github.com/benenen/channel-plugin/internal/api/http/web"
-	"github.com/benenen/channel-plugin/internal/app"
-	"github.com/benenen/channel-plugin/internal/channel/wechat"
-	"github.com/benenen/channel-plugin/internal/config"
-	"github.com/benenen/channel-plugin/internal/security"
-	"github.com/benenen/channel-plugin/internal/store"
-	"github.com/benenen/channel-plugin/internal/store/repositories"
+	"github.com/benenen/myclaw/internal/api/http/handlers"
+	"github.com/benenen/myclaw/internal/api/http/web"
+	"github.com/benenen/myclaw/internal/app"
+	"github.com/benenen/myclaw/internal/channel/wechat"
+	"github.com/benenen/myclaw/internal/config"
+	"github.com/benenen/myclaw/internal/security"
+	"github.com/benenen/myclaw/internal/store"
+	"github.com/benenen/myclaw/internal/store/repositories"
 )
 
 type App struct {

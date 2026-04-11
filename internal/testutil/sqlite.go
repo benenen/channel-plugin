@@ -3,7 +3,7 @@ package testutil
 import (
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/store"
+	"github.com/benenen/myclaw/internal/store"
 	"gorm.io/gorm"
 )
 

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/benenen/channel-plugin/internal/channel"
-	"github.com/benenen/channel-plugin/internal/domain"
-	"github.com/benenen/channel-plugin/internal/security"
+	"github.com/benenen/myclaw/internal/channel"
+	"github.com/benenen/myclaw/internal/domain"
+	"github.com/benenen/myclaw/internal/security"
 )
 
 type BindingService struct {

@@ -4,8 +4,8 @@ import (
 	"log"
 	stdhttp "net/http"
 
-	"github.com/benenen/channel-plugin/internal/bootstrap"
-	"github.com/benenen/channel-plugin/internal/config"
+	"github.com/benenen/myclaw/internal/bootstrap"
+	"github.com/benenen/myclaw/internal/config"
 )
 
 func main() {

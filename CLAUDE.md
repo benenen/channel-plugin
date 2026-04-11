@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**channel-plugin** — Centralized channel management service for AI CLI channel plugins. Go 1.23, standard `net/http`, SQLite via GORM, AES-256-GCM credential encryption. Licensed under MIT.
+**myclaw** — Centralized channel management service for AI CLI channel plugins. Go 1.23, standard `net/http`, SQLite via GORM, AES-256-GCM credential encryption. Licensed under MIT.
 
 ## Build & Run
 

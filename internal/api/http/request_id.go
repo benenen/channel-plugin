@@ -4,7 +4,7 @@ import (
 	"context"
 	stdhttp "net/http"
 
-	"github.com/benenen/channel-plugin/internal/domain"
+	"github.com/benenen/myclaw/internal/domain"
 )
 
 type requestIDContextKey struct{}

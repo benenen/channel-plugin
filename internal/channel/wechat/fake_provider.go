@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/benenen/channel-plugin/internal/channel"
+	"github.com/benenen/myclaw/internal/channel"
 )
 
 type FakeProvider struct {

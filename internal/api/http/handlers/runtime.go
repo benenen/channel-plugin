@@ -4,9 +4,9 @@ import (
 	"errors"
 	stdhttp "net/http"
 
-	"github.com/benenen/channel-plugin/internal/app"
-	httpapi "github.com/benenen/channel-plugin/internal/api/http"
-	"github.com/benenen/channel-plugin/internal/api/http/dto"
+	httpapi "github.com/benenen/myclaw/internal/api/http"
+	"github.com/benenen/myclaw/internal/api/http/dto"
+	"github.com/benenen/myclaw/internal/app"
 )
 
 func GetRuntimeConfig(svc *app.RuntimeService) stdhttp.HandlerFunc {

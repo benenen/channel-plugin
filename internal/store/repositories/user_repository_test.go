@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/testutil"
+	"github.com/benenen/myclaw/internal/testutil"
 )
 
 func TestUserRepositoryFindOrCreateByExternalUserID(t *testing.T) {

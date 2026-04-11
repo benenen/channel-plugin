@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/domain"
-	"github.com/benenen/channel-plugin/internal/testutil"
+	"github.com/benenen/myclaw/internal/domain"
+	"github.com/benenen/myclaw/internal/testutil"
 )
 
 func TestChannelAccountRepositoryUpsert(t *testing.T) {

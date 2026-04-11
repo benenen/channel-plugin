@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/benenen/channel-plugin/internal/domain"
+	"github.com/benenen/myclaw/internal/domain"
 )
 
 type UserService struct {

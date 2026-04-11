@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/channel/wechat"
-	"github.com/benenen/channel-plugin/internal/domain"
-	"github.com/benenen/channel-plugin/internal/security"
-	"github.com/benenen/channel-plugin/internal/store/repositories"
-	"github.com/benenen/channel-plugin/internal/testutil"
+	"github.com/benenen/myclaw/internal/channel/wechat"
+	"github.com/benenen/myclaw/internal/domain"
+	"github.com/benenen/myclaw/internal/security"
+	"github.com/benenen/myclaw/internal/store/repositories"
+	"github.com/benenen/myclaw/internal/testutil"
 )
 
 func newTestBindingService(t *testing.T) (*BindingService, *wechat.FakeProvider) {

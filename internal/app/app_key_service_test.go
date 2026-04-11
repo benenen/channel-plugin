@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/domain"
-	"github.com/benenen/channel-plugin/internal/store/repositories"
-	"github.com/benenen/channel-plugin/internal/testutil"
+	"github.com/benenen/myclaw/internal/domain"
+	"github.com/benenen/myclaw/internal/store/repositories"
+	"github.com/benenen/myclaw/internal/testutil"
 )
 
 func newTestAppKeyService(t *testing.T) *AppKeyService {

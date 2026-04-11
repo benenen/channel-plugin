@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/config"
+	"github.com/benenen/myclaw/internal/config"
 )
 
 func TestBootstrapBuildsDependencies(t *testing.T) {

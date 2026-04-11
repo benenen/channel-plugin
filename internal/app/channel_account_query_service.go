@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/benenen/channel-plugin/internal/domain"
+	"github.com/benenen/myclaw/internal/domain"
 )
 
 type ChannelAccountQueryService struct {

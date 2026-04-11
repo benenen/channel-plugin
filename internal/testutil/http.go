@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	httpapi "github.com/benenen/channel-plugin/internal/api/http"
+	httpapi "github.com/benenen/myclaw/internal/api/http"
 )
 
 func PostJSON(t *testing.T, handler stdhttp.Handler, path string, body string) *httptest.ResponseRecorder {

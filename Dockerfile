@@ -10,7 +10,7 @@ ENV GOPROXY=https://goproxy.cn,direct
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /channel-plugin ./cmd/server
+RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /myclaw ./cmd/server
 
 # Runtime stage
 FROM alpine:3.20
@@ -19,7 +19,7 @@ RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/
     apk add --no-cache ca-certificates sqlite-libs tzdata
 
 WORKDIR /app
-COPY --from=builder /channel-plugin .
+COPY --from=builder /myclaw .
 
 EXPOSE 8080
 
@@ -28,4 +28,4 @@ ENV CHANNEL_HTTP_ADDR=:8080 \
 
 VOLUME ["/app/data"]
 
-ENTRYPOINT ["./channel-plugin"]
+ENTRYPOINT ["./myclaw"]

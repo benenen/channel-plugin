@@ -4,11 +4,11 @@ import (
 	stdhttp "net/http"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/app"
-	"github.com/benenen/channel-plugin/internal/channel/wechat"
-	"github.com/benenen/channel-plugin/internal/security"
-	"github.com/benenen/channel-plugin/internal/store/repositories"
-	"github.com/benenen/channel-plugin/internal/testutil"
+	"github.com/benenen/myclaw/internal/app"
+	"github.com/benenen/myclaw/internal/channel/wechat"
+	"github.com/benenen/myclaw/internal/security"
+	"github.com/benenen/myclaw/internal/store/repositories"
+	"github.com/benenen/myclaw/internal/testutil"
 )
 
 func newTestServer(t *testing.T) stdhttp.Handler {

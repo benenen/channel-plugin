@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/benenen/channel-plugin/internal/channel"
+	"github.com/benenen/myclaw/internal/channel"
 )
 
 func TestFakeProviderCreateAndRefreshBinding(t *testing.T) {

@@ -3,8 +3,8 @@ package handlers
 import (
 	stdhttp "net/http"
 
-	"github.com/benenen/channel-plugin/internal/app"
-	httpapi "github.com/benenen/channel-plugin/internal/api/http"
+	httpapi "github.com/benenen/myclaw/internal/api/http"
+	"github.com/benenen/myclaw/internal/app"
 )
 
 type Dependencies struct {

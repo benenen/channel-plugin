@@ -1,4 +1,4 @@
-module github.com/benenen/channel-plugin
+module github.com/benenen/myclaw
 
 go 1.23.6
 

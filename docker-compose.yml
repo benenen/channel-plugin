@@ -1,8 +1,8 @@
 services:
-  channel-plugin:
+  myclaw:
     build: .
-    image: channel-plugin:latest
-    container_name: channel-plugin
+    image: myclaw:latest
+    container_name: myclaw
     restart: unless-stopped
     ports:
       - "8080:8080"

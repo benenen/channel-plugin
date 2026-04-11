@@ -1,4 +1,4 @@
-# channel-plugin
+# myclaw
 
 AI CLI channel plugin — centralized channel management service.
 

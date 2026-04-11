@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/benenen/channel-plugin/internal/channel"
+	"github.com/benenen/myclaw/internal/channel"
 )
 
 type Provider struct {
