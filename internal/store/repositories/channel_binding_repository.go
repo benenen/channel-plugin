@@ -21,6 +21,7 @@ func (r *ChannelBindingRepository) Create(ctx context.Context, binding domain.Ch
 	now := time.Now().UTC()
 	m := models.ChannelBinding{
 		ID:                 binding.ID,
+		BotID:              binding.BotID,
 		UserID:             binding.UserID,
 		ChannelType:        binding.ChannelType,
 		Status:             binding.Status,
@@ -53,6 +54,7 @@ func (r *ChannelBindingRepository) Update(ctx context.Context, binding domain.Ch
 	now := time.Now().UTC()
 	m := models.ChannelBinding{
 		ID:                 binding.ID,
+		BotID:              binding.BotID,
 		UserID:             binding.UserID,
 		ChannelType:        binding.ChannelType,
 		Status:             binding.Status,
@@ -74,6 +76,7 @@ func (r *ChannelBindingRepository) Update(ctx context.Context, binding domain.Ch
 func toDomainChannelBinding(m models.ChannelBinding) domain.ChannelBinding {
 	return domain.ChannelBinding{
 		ID:                 m.ID,
+		BotID:              m.BotID,
 		UserID:             m.UserID,
 		ChannelType:        m.ChannelType,
 		Status:             m.Status,

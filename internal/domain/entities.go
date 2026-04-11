@@ -26,6 +26,7 @@ type ChannelAccount struct {
 
 type ChannelBinding struct {
 	ID                 string
+	BotID              string
 	UserID             string
 	ChannelType        string
 	Status             string
@@ -37,6 +38,19 @@ type ChannelBinding struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	FinishedAt         *time.Time
+}
+
+type Bot struct {
+	ID               string
+	UserID           string
+	Name             string
+	ChannelType      string
+	ChannelAccountID string
+	ConnectionStatus string
+	ConnectionError  string
+	LastConnectedAt  *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type AppKey struct {

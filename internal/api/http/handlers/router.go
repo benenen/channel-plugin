@@ -8,10 +8,7 @@ import (
 )
 
 type Dependencies struct {
-	BindingService      *app.BindingService
-	AppKeyService       *app.AppKeyService
-	RuntimeService      *app.RuntimeService
-	AccountQueryService *app.ChannelAccountQueryService
+	BotService *app.BotService
 }
 
 func RegisterRoutes(mux *stdhttp.ServeMux, deps Dependencies) {
@@ -19,10 +16,8 @@ func RegisterRoutes(mux *stdhttp.ServeMux, deps Dependencies) {
 		return httpapi.RequestIDMiddleware()(h)
 	}
 
-	mux.Handle("POST /api/v1/channel-bindings/create", wrap(CreateBinding(deps.BindingService)))
-	mux.Handle("GET /api/v1/channel-bindings/detail", wrap(GetBindingDetail(deps.BindingService)))
-	mux.Handle("GET /api/v1/channel-accounts/list", wrap(ListChannelAccounts(deps.AccountQueryService)))
-	mux.Handle("POST /api/v1/channel-accounts/app-key/create", wrap(CreateAppKey(deps.AppKeyService)))
-	mux.Handle("POST /api/v1/channel-accounts/app-key/disable", wrap(DisableAppKey(deps.AppKeyService)))
-	mux.Handle("GET /api/v1/runtime/config", wrap(GetRuntimeConfig(deps.RuntimeService)))
+	mux.Handle("POST /api/v1/bots/create", wrap(CreateBot(deps.BotService)))
+	mux.Handle("GET /api/v1/bots/list", wrap(ListBots(deps.BotService)))
+	mux.Handle("POST /api/v1/bots/connect", wrap(ConnectBot(deps.BotService)))
+	mux.Handle("GET /api/v1/bots/connect", wrap(RefreshBotLogin(deps.BotService)))
 }

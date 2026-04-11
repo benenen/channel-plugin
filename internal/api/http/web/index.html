@@ -3,225 +3,533 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Channel Plugin Admin</title>
+<title>myclaw Bots</title>
 <style>
 :root {
-  --bg: #f5f7fa;
-  --card: #fff;
-  --border: #e2e8f0;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --text: #1e293b;
-  --text-secondary: #64748b;
-  --radius: 8px;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --panel-soft: #f8fafc;
+  --line: #e6ebf2;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-soft: #dbeafe;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --radius: 20px;
+  --radius-sm: 14px;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
-
-header { background: var(--primary); color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
-header h1 { font-size: 20px; font-weight: 600; }
-header span { font-size: 13px; opacity: 0.8; }
-
-.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-
-.tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--card); border-radius: var(--radius); padding: 4px; border: 1px solid var(--border); }
-.tab { padding: 10px 20px; border: none; background: none; cursor: pointer; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: all .15s; }
-.tab.active { background: var(--primary); color: #fff; }
-.tab:hover:not(.active) { background: #f1f5f9; }
-
-.panel { display: none; }
-.panel.active { display: block; }
-
-.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
-.card h3 { font-size: 16px; margin-bottom: 12px; }
-
-.form-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; flex-wrap: wrap; }
-.form-group { display: flex; flex-direction: column; gap: 4px; }
-.form-group label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
-.form-group input, .form-group select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; min-width: 200px; }
-.form-group input:focus, .form-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
-
-button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s; }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-danger { background: var(--danger); color: #fff; }
-.btn-danger:hover { background: var(--danger-hover); }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-secondary); }
-td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: #f8fafc; }
-
-.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-.badge-success { background: #dcfce7; color: #166534; }
-.badge-warning { background: #fef9c3; color: #854d0e; }
-.badge-danger { background: #fee2e2; color: #991b1b; }
-.badge-info { background: #e0e7ff; color: #3730a3; }
-.badge-neutral { background: #f1f5f9; color: #475569; }
-
-.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: var(--radius); color: #fff; font-size: 14px; z-index: 1000; animation: slideIn .3s ease; }
-.toast-success { background: var(--success); }
-.toast-error { background: var(--danger); }
-@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
-.empty { text-align: center; padding: 40px; color: var(--text-secondary); }
-
-.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; align-items: center; justify-content: center; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.shell {
+  width: min(1280px, calc(100vw - 32px));
+  margin: 20px auto;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255,255,255,0.82);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+.brand {
+  display: grid;
+  gap: 4px;
+}
+.brand small {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.brand h1 {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.user-pill {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--muted);
+}
+.user-pill svg {
+  width: 18px;
+  height: 18px;
+}
+.toolbar input,
+.toolbar select,
+input,
+select,
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  padding: 11px 13px;
+  font: inherit;
+  outline: none;
+}
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+select {
+  padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, #64748b 50%), linear-gradient(135deg, #64748b 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+select option {
+  color: var(--text);
+  background: #fff;
+}
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+button {
+  cursor: pointer;
+  font-weight: 600;
+}
+button:hover { transform: translateY(-1px); }
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-secondary {
+  background: var(--panel-soft);
+}
+.btn-danger {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: var(--danger);
+}
+.layout {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 18px;
+}
+.sidebar,
+.workspace {
+  background: rgba(255,255,255,0.84);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+.sidebar {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  align-self: start;
+  position: sticky;
+  top: 20px;
+}
+.workspace {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-title h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+.section-title span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.modal .form-grid {
+  margin-top: 12px;
+}
+.modal .field,
+.modal .field.wide,
+.modal .field.action {
+  grid-column: span 12;
+}
+.modal .field.action {
+  display: flex;
+  justify-content: flex-end;
+}
+.modal .field.action button {
+  width: auto;
+}
+.qr-box + .qr-box {
+  margin-top: 10px;
+}
+.bot-list {
+  display: grid;
+  gap: 10px;
+}
+.bot-item {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  cursor: pointer;
+  transition: .18s ease;
+}
+.bot-item:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+.bot-item.active {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  box-shadow: inset 0 0 0 1px #dbeafe;
+}
+.bot-item strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+.bot-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px;
+}
+.card h3 {
+  font-size: 14px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.mini {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+}
+.mini span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mini strong {
+  display: block;
+  font-size: 14px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px;
+}
+.field {
+  grid-column: span 4;
+  display: grid;
+  gap: 8px;
+}
+.field.wide { grid-column: span 5; }
+.field.action { grid-column: span 3; align-content: end; }
+.field label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.empty {
+  padding: 28px 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+  text-align: center;
+  color: var(--muted);
+  background: #fff;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge-neutral { background: #eef2f7; color: #64748b; }
+.badge-info { background: #e0f2fe; color: #0284c7; }
+.badge-success { background: #dcfce7; color: var(--success); }
+.badge-warning { background: #fef3c7; color: var(--warning); }
+.badge-danger { background: #fee2e2; color: var(--danger); }
+.kv {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+  font-size: 13px;
+}
+.kv + .kv { margin-top: 10px; }
+.kv span { color: var(--muted); }
+pre {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  overflow: auto;
+  font-size: 12px;
+}
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #111827;
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(8px);
+  z-index: 999;
+}
 .modal-overlay.active { display: flex; }
-.modal { background: var(--card); border-radius: var(--radius); padding: 24px; min-width: 400px; max-width: 90vw; }
-.modal h3 { margin-bottom: 16px; }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-
-.key-display { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 13px; word-break: break-all; margin: 12px 0; user-select: all; }
-
-.qr-section { text-align: center; padding: 20px; }
-.qr-payload { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; margin: 12px 0; }
-.poll-status { margin-top: 12px; font-size: 14px; }
-
-.stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; flex: 1; min-width: 150px; }
-.stat-card .number { font-size: 28px; font-weight: 700; color: var(--primary); }
-.stat-card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
+.modal {
+  width: min(560px, calc(100vw - 24px));
+  background: #fff;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+.modal h3 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+.modal p {
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.qr-box {
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; }
+  .grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+  .field, .field.wide, .field.action { grid-column: auto; }
+  .topbar { flex-direction: column; align-items: stretch; }
+  .toolbar { flex-direction: column; }
+}
 </style>
 </head>
 <body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <small>myclaw</small>
+      <h1>Bots</h1>
+    </div>
+    <div class="toolbar">
+      <div class="user-pill" title="u_123" aria-label="Current user">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 21a8 8 0 0 0-16 0"/>
+          <circle cx="12" cy="8" r="4"/>
+        </svg>
+      </div>
+    </div>
+  </header>
 
-<header>
-  <h1>Channel Plugin</h1>
-  <span>Management Console</span>
-</header>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="list-header">
+        <div class="list-title">
+          <h2>Bot List</h2>
+          <span id="bot-count">(count: 0)</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn-secondary icon-btn" onclick="loadBots()" title="Refresh" aria-label="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+              <path d="M21 3v6h-6"/>
+            </svg>
+          </button>
+          <button class="btn-secondary icon-btn" onclick="openCreateBotModal()" title="New Bot">+</button>
+        </div>
+      </div>
 
-<div class="container">
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('bindings')">Bindings</button>
-    <button class="tab" onclick="switchTab('accounts')">Channel Accounts</button>
-    <button class="tab" onclick="switchTab('appkeys')">App Keys</button>
+      <div id="bot-list" class="bot-list"></div>
+      <div id="bot-empty" class="empty">No bots</div>
+    </aside>
+
+    <main class="workspace">
+      <div id="workspace-empty" class="empty">Select a bot</div>
+
+      <div id="workspace-detail" style="display:none; gap:16px;">
+        <div class="card">
+          <div class="section-title">
+            <h2 id="detail-name">-</h2>
+            <span id="detail-status-badge"></span>
+          </div>
+          <div class="grid">
+            <div class="mini">
+              <span>Channel</span>
+              <strong id="detail-channel">-</strong>
+            </div>
+            <div class="mini">
+              <span>Bot ID</span>
+              <strong id="detail-bot-id">-</strong>
+            </div>
+            <div class="mini">
+              <span>Account</span>
+              <strong id="detail-account-id">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Connect</h3>
+          <button class="btn-primary" onclick="connectSelectedBot()">Login / Connect</button>
+          <div id="connect-result"></div>
+        </div>
+      </div>
+    </main>
   </div>
+</div>
 
-  <!-- Bindings Panel -->
-  <div id="panel-bindings" class="panel active">
-    <div class="card">
-      <h3>Create New Binding</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>User ID</label>
-          <input type="text" id="bind-user-id" placeholder="e.g. u_123">
-        </div>
-        <div class="form-group">
-          <label>Channel Type</label>
-          <select id="bind-channel-type">
-            <option value="wechat">WeChat</option>
-          </select>
-        </div>
-        <button class="btn-primary" onclick="createBinding()">Create Binding</button>
+<div class="modal-overlay" id="create-bot-modal">
+  <div class="modal">
+    <h3>New Bot</h3>
+    <div class="form-grid">
+      <div class="field wide">
+        <label>Name</label>
+        <input id="create-bot-name" type="text" placeholder="sales-bot">
+      </div>
+      <div class="field wide">
+        <label>Channel</label>
+        <select id="create-bot-channel">
+          <option value="wechat">wechat</option>
+        </select>
       </div>
     </div>
-
-    <div class="card">
-      <h3>Binding Sessions</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Binding ID</label>
-          <input type="text" id="query-binding-id" placeholder="e.g. bind_xxx">
-        </div>
-        <button class="btn-primary" onclick="queryBinding()">Query</button>
-      </div>
-      <div id="binding-result"></div>
-    </div>
-  </div>
-
-  <!-- Accounts Panel -->
-  <div id="panel-accounts" class="panel">
-    <div class="card">
-      <h3>List Channel Accounts</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>User ID</label>
-          <input type="text" id="acct-user-id" placeholder="e.g. u_123">
-        </div>
-        <div class="form-group">
-          <label>Channel Type</label>
-          <select id="acct-channel-type">
-            <option value="">All</option>
-            <option value="wechat">WeChat</option>
-          </select>
-        </div>
-        <button class="btn-primary" onclick="listAccounts()">Search</button>
-      </div>
-      <table id="accounts-table" style="display:none">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Channel</th>
-            <th>Account UID</th>
-            <th>Display Name</th>
-            <th>App Key</th>
-            <th>Last Bound</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="accounts-body"></tbody>
-      </table>
-      <div id="accounts-empty" class="empty" style="display:none">No accounts found</div>
-    </div>
-  </div>
-
-  <!-- App Keys Panel -->
-  <div id="panel-appkeys" class="panel">
-    <div class="card">
-      <h3>Generate App Key</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Channel Account ID</label>
-          <input type="text" id="appkey-acct-id" placeholder="e.g. acct_xxx">
-        </div>
-        <button class="btn-primary" onclick="createAppKey()">Generate / Rotate</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Disable App Key</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Channel Account ID or Key ID</label>
-          <input type="text" id="disable-id" placeholder="acct_xxx or key_xxx">
-        </div>
-        <button class="btn-danger" onclick="disableAppKey()">Disable</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Test Runtime Config</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>App Key</label>
-          <input type="text" id="test-appkey" placeholder="appk_xxx">
-        </div>
-        <button class="btn-primary" onclick="testRuntimeConfig()">Fetch Config</button>
-      </div>
-      <div id="runtime-result"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeCreateBotModal()">Close</button>
+      <button class="btn-primary" onclick="createBot()">Create</button>
     </div>
   </div>
 </div>
 
-<!-- QR Modal -->
 <div class="modal-overlay" id="qr-modal">
   <div class="modal">
-    <h3>Scan QR Code</h3>
-    <div class="qr-section">
-      <p>Use WeChat to scan the following QR code payload:</p>
-      <div class="qr-payload" id="qr-payload"></div>
-      <div>Expires: <span id="qr-expires"></span></div>
-      <div class="poll-status">
-        Status: <span class="badge badge-info" id="qr-status">Polling...</span>
+    <h3>QR Login</h3>
+    <p id="qr-status-text">Scan with WeChat</p>
+    <div class="qr-box"><img id="qr-image" alt="WeChat QR code" style="display:none;max-width:100%;border-radius:12px;"/></div>
+    <div class="qr-box" id="qr-share-box" style="display:none;">
+      <div class="kv"><span>share</span><strong><a id="qr-share-link" target="_blank" rel="noreferrer"></a></strong></div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:10px;">
+        <button class="btn-secondary" onclick="copyShareURL()">Copy Link</button>
       </div>
-      <div id="qr-account-info" style="display:none; margin-top:12px;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-danger" onclick="closeQRModal()">Close</button>
@@ -229,46 +537,32 @@ tr:hover td { background: #f8fafc; }
   </div>
 </div>
 
-<!-- App Key Modal -->
-<div class="modal-overlay" id="appkey-modal">
-  <div class="modal">
-    <h3>App Key Generated</h3>
-    <p style="color:var(--danger);font-weight:600;font-size:13px;">⚠ This key will only be shown once. Copy it now!</p>
-    <div class="key-display" id="appkey-display"></div>
-    <div style="font-size:13px;color:var(--text-secondary);">
-      <div>Key ID: <span id="appkey-id"></span></div>
-      <div>Prefix: <span id="appkey-prefix"></span></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-primary" onclick="copyAppKey()">Copy Key</button>
-      <button onclick="closeAppKeyModal()">Close</button>
-    </div>
-  </div>
-</div>
-
 <script>
 const API = '/api/v1';
-let pollTimer = null;
+let bots = [];
+let selectedBotId = '';
+let loginPollTimer = null;
+let activeBindingId = '';
 
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
-  document.getElementById('panel-' + name).classList.add('active');
-}
-
-function toast(msg, type) {
+function toast(msg) {
   const el = document.createElement('div');
-  el.className = 'toast toast-' + type;
+  el.className = 'toast';
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  setTimeout(() => el.remove(), 2400);
 }
 
 function statusBadge(status) {
   const map = {
-    'qr_ready': 'info', 'confirmed': 'success', 'failed': 'danger',
-    'expired': 'warning', 'pending': 'neutral', 'active': 'success', 'disabled': 'danger'
+    login_required: 'warning',
+    connecting: 'info',
+    connected: 'success',
+    error: 'danger',
+    qr_ready: 'info',
+    pending: 'neutral',
+    confirmed: 'success',
+    failed: 'danger',
+    expired: 'warning'
   };
   return `<span class="badge badge-${map[status] || 'neutral'}">${status}</span>`;
 }
@@ -283,181 +577,239 @@ async function api(method, path, body) {
   return res.json();
 }
 
-async function apiWithHeader(path, headers) {
-  const res = await fetch(API + path, { headers });
-  return res.json();
+function currentUserId() {
+  return 'u_123';
 }
 
-// === Bindings ===
-
-async function createBinding() {
-  const userId = document.getElementById('bind-user-id').value.trim();
-  const channelType = document.getElementById('bind-channel-type').value;
-  if (!userId) { toast('User ID is required', 'error'); return; }
-
-  const data = await api('POST', '/channel-bindings/create', { user_id: userId, channel_type: channelType });
-  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
-
-  toast('Binding created', 'success');
-  showQRModal(data.data);
+function openCreateBotModal() {
+  document.getElementById('create-bot-modal').classList.add('active');
 }
 
-function showQRModal(binding) {
-  document.getElementById('qr-payload').textContent = binding.qr_code_payload;
-  document.getElementById('qr-expires').textContent = binding.expires_at ? new Date(binding.expires_at).toLocaleString() : 'N/A';
-  document.getElementById('qr-status').textContent = binding.status;
-  document.getElementById('qr-status').className = 'badge badge-info';
-  document.getElementById('qr-account-info').style.display = 'none';
-  document.getElementById('qr-modal').classList.add('active');
-
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(() => pollBinding(binding.binding_id), 3000);
+function closeCreateBotModal() {
+  document.getElementById('create-bot-modal').classList.remove('active');
 }
 
-async function pollBinding(bindingId) {
-  const data = await api('GET', '/channel-bindings/detail?binding_id=' + bindingId);
-  if (data.code !== 'OK') return;
-
-  const b = data.data;
-  const statusEl = document.getElementById('qr-status');
-  statusEl.innerHTML = statusBadge(b.status);
-
-  if (b.status === 'confirmed') {
-    clearInterval(pollTimer);
-    pollTimer = null;
-    const info = document.getElementById('qr-account-info');
-    info.style.display = 'block';
-    info.innerHTML = `<strong>Binding confirmed!</strong><br>Account: ${b.channel_account_id || ''}<br>UID: ${b.account_uid || ''}`;
-    toast('Binding confirmed!', 'success');
-  } else if (b.status === 'failed' || b.status === 'expired') {
-    clearInterval(pollTimer);
-    pollTimer = null;
-    toast('Binding ' + b.status, 'error');
+async function createBot() {
+  const userId = currentUserId();
+  const name = document.getElementById('create-bot-name').value.trim();
+  const channelType = document.getElementById('create-bot-channel').value;
+  if (!userId || !name) {
+    toast('user_id and name required');
+    return;
   }
+  const data = await api('POST', '/bots/create', { user_id: userId, name, channel_type: channelType });
+  if (data.code !== 'OK') {
+    toast(data.message || data.code);
+    return;
+  }
+  document.getElementById('create-bot-name').value = '';
+  closeCreateBotModal();
+  await loadBots(data.data.bot_id);
+}
+
+window.openCreateBotModal = openCreateBotModal;
+window.closeCreateBotModal = closeCreateBotModal;
+
+async function loadBots(preferBotId) {
+  const userId = currentUserId();
+  if (!userId) {
+    toast('user_id required');
+    return;
+  }
+  const data = await api('GET', '/bots/list?user_id=' + encodeURIComponent(userId));
+  if (data.code !== 'OK') {
+    toast(data.message || data.code);
+    return;
+  }
+  bots = data.data || [];
+  if (preferBotId) {
+    selectedBotId = preferBotId;
+  } else if (!bots.some(b => b.bot_id === selectedBotId)) {
+    selectedBotId = bots[0]?.bot_id || '';
+  }
+  renderBotList();
+  document.getElementById('bot-count').textContent = `(count: ${bots.length})`;
+  renderDetail();
+}
+
+function renderBotList() {
+  const list = document.getElementById('bot-list');
+  const empty = document.getElementById('bot-empty');
+  if (!bots.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = bots.map(bot => `
+    <div class="bot-item ${bot.bot_id === selectedBotId ? 'active' : ''}" onclick="selectBot('${bot.bot_id}')">
+      <strong>${escapeHtml(bot.name)}</strong>
+      <div class="bot-meta">
+        <span>${escapeHtml(bot.channel_type)}</span>
+        <span>${statusBadge(bot.connection_status)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectBot(botId) {
+  selectedBotId = botId;
+  renderBotList();
+  renderDetail();
+}
+
+function renderDetail() {
+  const empty = document.getElementById('workspace-empty');
+  const detail = document.getElementById('workspace-detail');
+  const bot = bots.find(b => b.bot_id === selectedBotId);
+  if (!bot) {
+    stopLoginPolling();
+    empty.style.display = 'block';
+    detail.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  detail.style.display = 'grid';
+  document.getElementById('detail-name').textContent = bot.name;
+  document.getElementById('detail-status-badge').innerHTML = statusBadge(bot.connection_status);
+  document.getElementById('detail-channel').textContent = bot.channel_type;
+  document.getElementById('detail-bot-id').textContent = bot.bot_id;
+  document.getElementById('detail-account-id').textContent = bot.channel_account_id || '-';
+  if (!activeBindingId) {
+    document.getElementById('connect-result').innerHTML = '';
+  }
+}
+
+function stopLoginPolling() {
+  if (loginPollTimer) {
+    clearTimeout(loginPollTimer);
+    loginPollTimer = null;
+  }
+  activeBindingId = '';
+}
+
+function updateBotFromRefresh(result) {
+  const bot = bots.find(item => item.bot_id === result.bot_id);
+  if (!bot) {
+    return;
+  }
+  bot.connection_status = result.connection_status;
+  bot.channel_account_id = result.channel_account_id || '';
+  renderBotList();
+  renderDetail();
+}
+
+async function pollLogin(bindingID) {
+  const data = await api('GET', '/bots/connect?binding_id=' + encodeURIComponent(bindingID));
+  if (data.code !== 'OK') {
+    stopLoginPolling();
+    toast(data.message || data.code);
+    return;
+  }
+  const result = data.data;
+  activeBindingId = result.binding_id;
+  document.getElementById('connect-result').innerHTML = '';
+  if (result.qr_code_payload) {
+    showQRModal(result.qr_code_payload, result.qr_share_url, result.status);
+  }
+  updateBotFromRefresh(result);
+  if (result.status === 'confirmed') {
+    closeQRModal();
+    stopLoginPolling();
+    toast('connected');
+    return;
+  }
+  if (result.status === 'failed' || result.status === 'expired' || result.connection_status === 'error') {
+    stopLoginPolling();
+    toast(result.status);
+    return;
+  }
+  loginPollTimer = setTimeout(() => pollLogin(bindingID), 2000);
+}
+
+function startLoginPolling(bindingID) {
+  stopLoginPolling();
+  activeBindingId = bindingID;
+  loginPollTimer = setTimeout(() => pollLogin(bindingID), 2000);
 }
 
 function closeQRModal() {
   document.getElementById('qr-modal').classList.remove('active');
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
-async function queryBinding() {
-  const id = document.getElementById('query-binding-id').value.trim();
-  if (!id) { toast('Binding ID is required', 'error'); return; }
+window.closeQRModal = closeQRModal;
 
-  const data = await api('GET', '/channel-bindings/detail?binding_id=' + id);
-  const el = document.getElementById('binding-result');
+async function connectSelectedBot() {
+  if (!selectedBotId) {
+    toast('select a bot');
+    return;
+  }
+  const data = await api('POST', '/bots/connect', { bot_id: selectedBotId });
   if (data.code !== 'OK') {
-    el.innerHTML = `<div style="margin-top:12px;color:var(--danger)">${data.code}: ${data.message}</div>`;
+    toast(data.message || data.code);
     return;
   }
-  const b = data.data;
-  el.innerHTML = `
-    <table style="margin-top:12px">
-      <tr><td><strong>Binding ID</strong></td><td>${b.binding_id}</td></tr>
-      <tr><td><strong>Status</strong></td><td>${statusBadge(b.status)}</td></tr>
-      <tr><td><strong>Channel</strong></td><td>${b.channel_type}</td></tr>
-      <tr><td><strong>Account ID</strong></td><td>${b.channel_account_id || '-'}</td></tr>
-      <tr><td><strong>Account UID</strong></td><td>${b.account_uid || '-'}</td></tr>
-      <tr><td><strong>Expires</strong></td><td>${b.expires_at ? new Date(b.expires_at).toLocaleString() : '-'}</td></tr>
-      <tr><td><strong>Error</strong></td><td>${b.error_message || '-'}</td></tr>
-    </table>`;
+  const result = data.data;
+  activeBindingId = result.binding_id;
+  document.getElementById('connect-result').innerHTML = '';
+  if (result.qr_code_payload) {
+    showQRModal(result.qr_code_payload, result.qr_share_url, result.status);
+  }
+  startLoginPolling(result.binding_id);
 }
 
-// === Accounts ===
-
-async function listAccounts() {
-  const userId = document.getElementById('acct-user-id').value.trim();
-  if (!userId) { toast('User ID is required', 'error'); return; }
-  const channelType = document.getElementById('acct-channel-type').value;
-
-  let path = '/channel-accounts/list?user_id=' + encodeURIComponent(userId);
-  if (channelType) path += '&channel_type=' + channelType;
-
-  const data = await api('GET', path);
-  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
-
-  const items = data.data || [];
-  const table = document.getElementById('accounts-table');
-  const empty = document.getElementById('accounts-empty');
-  const body = document.getElementById('accounts-body');
-
-  if (items.length === 0) {
-    table.style.display = 'none';
-    empty.style.display = 'block';
+async function copyShareURL() {
+  const link = document.getElementById('qr-share-link').href;
+  if (!link) {
     return;
   }
-
-  table.style.display = 'table';
-  empty.style.display = 'none';
-  body.innerHTML = items.map(a => `
-    <tr>
-      <td><code>${a.id}</code></td>
-      <td>${a.channel_type}</td>
-      <td>${a.account_uid}</td>
-      <td>${a.display_name || '-'}</td>
-      <td>${a.has_active_app_key ? statusBadge('active') : statusBadge('disabled')}</td>
-      <td>${a.last_bound_at ? new Date(a.last_bound_at).toLocaleString() : '-'}</td>
-      <td>
-        <button class="btn-primary btn-sm" onclick="createAppKeyFor('${a.id}')">Gen Key</button>
-      </td>
-    </tr>
-  `).join('');
+  await navigator.clipboard.writeText(link);
+  toast('link copied');
 }
 
-function createAppKeyFor(acctId) {
-  document.getElementById('appkey-acct-id').value = acctId;
-  switchTab('appkeys');
-  createAppKey();
-}
-
-// === App Keys ===
-
-async function createAppKey() {
-  const acctId = document.getElementById('appkey-acct-id').value.trim();
-  if (!acctId) { toast('Channel Account ID is required', 'error'); return; }
-
-  const data = await api('POST', '/channel-accounts/app-key/create', { channel_account_id: acctId });
-  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
-
-  document.getElementById('appkey-display').textContent = data.data.app_key;
-  document.getElementById('appkey-id').textContent = data.data.key_id;
-  document.getElementById('appkey-prefix').textContent = data.data.app_key_prefix;
-  document.getElementById('appkey-modal').classList.add('active');
-  toast('App key generated', 'success');
-}
-
-function copyAppKey() {
-  const key = document.getElementById('appkey-display').textContent;
-  navigator.clipboard.writeText(key).then(() => toast('Copied!', 'success'));
-}
-
-function closeAppKeyModal() {
-  document.getElementById('appkey-modal').classList.remove('active');
-}
-
-async function disableAppKey() {
-  const id = document.getElementById('disable-id').value.trim();
-  if (!id) { toast('ID is required', 'error'); return; }
-
-  const body = id.startsWith('key_') ? { key_id: id } : { channel_account_id: id };
-  const data = await api('POST', '/channel-accounts/app-key/disable', body);
-  if (data.code !== 'OK') { toast(data.message, 'error'); return; }
-  toast('App key disabled', 'success');
-}
-
-async function testRuntimeConfig() {
-  const key = document.getElementById('test-appkey').value.trim();
-  if (!key) { toast('App Key is required', 'error'); return; }
-
-  const data = await apiWithHeader('/runtime/config', { 'X-App-Key': key });
-  const el = document.getElementById('runtime-result');
-  if (data.code !== 'OK') {
-    el.innerHTML = `<div style="margin-top:12px;color:var(--danger)">${data.code}: ${data.message}</div>`;
-    return;
+function showQRModal(payload, shareURL, status) {
+  const image = document.getElementById('qr-image');
+  const shareBox = document.getElementById('qr-share-box');
+  const shareLink = document.getElementById('qr-share-link');
+  if (payload) {
+    image.src = payload;
+    image.style.display = 'block';
+  } else {
+    image.removeAttribute('src');
+    image.style.display = 'none';
   }
-  el.innerHTML = `<pre style="margin-top:12px;background:#f1f5f9;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto">${JSON.stringify(data.data, null, 2)}</pre>`;
+  if (shareURL) {
+    shareLink.href = shareURL;
+    shareLink.textContent = shareURL;
+    shareBox.style.display = 'block';
+  } else {
+    shareLink.removeAttribute('href');
+    shareLink.textContent = '';
+    shareBox.style.display = 'none';
+  }
+  document.getElementById('qr-status-text').textContent = status || 'qr_ready';
+  document.getElementById('qr-modal').classList.add('active');
 }
+
+window.connectSelectedBot = connectSelectedBot;
+window.showQRModal = showQRModal;
+window.copyShareURL = copyShareURL;
+window.loadBots = loadBots;
+window.selectBot = selectBot;
+window.createBot = createBot;
+window.closeQRModal = closeQRModal;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+loadBots();
+
 </script>
 </body>
 </html>

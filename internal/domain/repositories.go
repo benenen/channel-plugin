@@ -18,6 +18,13 @@ type ChannelBindingRepository interface {
 	Update(ctx context.Context, binding ChannelBinding) (ChannelBinding, error)
 }
 
+type BotRepository interface {
+	Create(ctx context.Context, bot Bot) (Bot, error)
+	GetByID(ctx context.Context, id string) (Bot, error)
+	ListByUserID(ctx context.Context, userID string) ([]Bot, error)
+	Update(ctx context.Context, bot Bot) (Bot, error)
+}
+
 type AppKeyRepository interface {
 	Create(ctx context.Context, key AppKey) (AppKey, error)
 	FindByHash(ctx context.Context, hash string) (AppKey, error)

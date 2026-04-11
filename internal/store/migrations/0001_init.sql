@@ -25,6 +25,7 @@ ON channel_accounts(user_id, channel_type, account_uid);
 
 CREATE TABLE IF NOT EXISTS channel_bindings (
     id TEXT PRIMARY KEY,
+    bot_id TEXT NOT NULL DEFAULT '',
     user_id TEXT NOT NULL,
     channel_type TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -38,16 +39,17 @@ CREATE TABLE IF NOT EXISTS channel_bindings (
     finished_at DATETIME
 );
 
-CREATE TABLE IF NOT EXISTS app_keys (
+CREATE TABLE IF NOT EXISTS bots (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
-    channel_account_id TEXT NOT NULL,
-    app_key_hash TEXT NOT NULL,
-    app_key_prefix TEXT NOT NULL,
-    status TEXT NOT NULL,
-    last_used_at DATETIME,
+    name TEXT NOT NULL,
+    channel_type TEXT NOT NULL,
+    channel_account_id TEXT NOT NULL DEFAULT '',
+    connection_status TEXT NOT NULL,
+    connection_error TEXT NOT NULL DEFAULT '',
+    last_connected_at DATETIME,
     created_at DATETIME NOT NULL,
-    disabled_at DATETIME
+    updated_at DATETIME NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_app_keys_hash ON app_keys(app_key_hash);
+CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);

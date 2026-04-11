@@ -2,8 +2,11 @@ package wechat
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+
+	qrcode "github.com/skip2/go-qrcode"
 
 	"github.com/benenen/myclaw/internal/channel"
 )
@@ -21,11 +24,24 @@ func (p *Provider) CreateBinding(ctx context.Context, req channel.CreateBindingR
 	if err != nil {
 		return channel.CreateBindingResult{}, fmt.Errorf("wechat create binding: %w", err)
 	}
+	qrPayload, err := renderQRCodeDataURL(result.qrShareURL())
+	if err != nil {
+		return channel.CreateBindingResult{}, fmt.Errorf("wechat render qr: %w", err)
+	}
 	return channel.CreateBindingResult{
-		ProviderBindingRef: result.ProviderBindingRef,
-		QRCodePayload:      result.QRCodePayload,
-		ExpiresAt:          result.ExpiresAt,
+		ProviderBindingRef: result.providerRef(),
+		QRCodePayload:      qrPayload,
+		QRShareURL:         result.qrShareURL(),
+		ExpiresAt:          result.normalizedExpiry(),
 	}, nil
+}
+
+func renderQRCodeDataURL(payload string) (string, error) {
+	png, err := qrcode.Encode(payload, qrcode.Medium, 280)
+	if err != nil {
+		return "", err
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), nil
 }
 
 func (p *Provider) RefreshBinding(ctx context.Context, req channel.RefreshBindingRequest) (channel.RefreshBindingResult, error) {
@@ -34,14 +50,14 @@ func (p *Provider) RefreshBinding(ctx context.Context, req channel.RefreshBindin
 		return channel.RefreshBindingResult{}, fmt.Errorf("wechat refresh binding: %w", err)
 	}
 	return channel.RefreshBindingResult{
-		ProviderStatus:    result.Status,
-		QRCodePayload:     result.QRCodePayload,
-		ExpiresAt:         result.ExpiresAt,
-		AccountUID:        result.AccountUID,
-		DisplayName:       result.DisplayName,
+		ProviderStatus:    result.normalizedStatus(),
+		QRCodePayload:     result.qrPayload(),
+		ExpiresAt:         result.normalizedExpiry(),
+		AccountUID:        result.accountUID(),
+		DisplayName:       result.displayName(),
 		AvatarURL:         result.AvatarURL,
-		CredentialPayload: result.CredentialPayload,
-		CredentialVersion: result.CredentialVersion,
+		CredentialPayload: result.normalizedCredentialPayload(),
+		CredentialVersion: result.normalizedCredentialVersion(),
 		ErrorMessage:      result.ErrorMessage,
 	}, nil
 }

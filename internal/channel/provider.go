@@ -19,6 +19,7 @@ type CreateBindingRequest struct {
 type CreateBindingResult struct {
 	ProviderBindingRef string
 	QRCodePayload      string
+	QRShareURL         string
 	ExpiresAt          time.Time
 }
 

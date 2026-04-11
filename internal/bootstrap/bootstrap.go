@@ -38,7 +38,7 @@ func New(cfg config.Config) (*App, error) {
 	userRepo := repositories.NewUserRepository(db)
 	accountRepo := repositories.NewChannelAccountRepository(db)
 	bindingRepo := repositories.NewChannelBindingRepository(db)
-	appKeyRepo := repositories.NewAppKeyRepository(db)
+	botRepo := repositories.NewBotRepository(db)
 
 	// Provider
 	wechatCfg := wechat.LoadConfig()
@@ -46,10 +46,7 @@ func New(cfg config.Config) (*App, error) {
 	provider := wechat.NewProvider(wechatClient)
 
 	// Application services
-	bindingSvc := app.NewBindingService(userRepo, bindingRepo, accountRepo, cipher, provider)
-	appKeySvc := app.NewAppKeyService(appKeyRepo, accountRepo)
-	runtimeSvc := app.NewRuntimeService(appKeyRepo, accountRepo, cipher, provider)
-	accountQuerySvc := app.NewChannelAccountQueryService(userRepo, accountRepo, appKeyRepo)
+	botSvc := app.NewBotService(userRepo, botRepo, bindingRepo, accountRepo, cipher, provider)
 
 	// HTTP
 	mux := stdhttp.NewServeMux()
@@ -62,10 +59,7 @@ func New(cfg config.Config) (*App, error) {
 	mux.Handle("/", web.Handler())
 
 	handlers.RegisterRoutes(mux, handlers.Dependencies{
-		BindingService:      bindingSvc,
-		AppKeyService:       appKeySvc,
-		RuntimeService:      runtimeSvc,
-		AccountQueryService: accountQuerySvc,
+		BotService: botSvc,
 	})
 
 	return &App{

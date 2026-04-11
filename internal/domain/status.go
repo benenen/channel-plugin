@@ -6,4 +6,9 @@ const (
 	BindingStatusConfirmed = "confirmed"
 	BindingStatusFailed    = "failed"
 	BindingStatusExpired   = "expired"
+
+	BotConnectionStatusLoginRequired = "login_required"
+	BotConnectionStatusConnecting    = "connecting"
+	BotConnectionStatusConnected     = "connected"
+	BotConnectionStatusError         = "error"
 )

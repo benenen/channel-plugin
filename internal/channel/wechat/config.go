@@ -9,7 +9,7 @@ type Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		ReferenceBaseURL: getEnvOrDefault("WECHAT_REFERENCE_BASE_URL", "http://localhost:9090"),
+		ReferenceBaseURL: getEnvOrDefault("WECHAT_REFERENCE_BASE_URL", "https://ilinkai.weixin.qq.com"),
 		AuthToken:        os.Getenv("WECHAT_AUTH_TOKEN"),
 	}
 }
