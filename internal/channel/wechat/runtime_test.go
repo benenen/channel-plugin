@@ -19,7 +19,7 @@ func (c *testClient) GetBindingSession(context.Context, string) (GetSessionResul
 	return GetSessionResult{}, nil
 }
 
-func (c *testClient) GetMessages(context.Context, string) ([]Message, error) {
+func (c *testClient) GetMessagesLongPoll(context.Context, string, time.Duration) ([]Message, error) {
 	return []Message{
 		{MsgID: "msg_test_1", From: "wxid_1", Text: "hello from test"},
 	}, nil

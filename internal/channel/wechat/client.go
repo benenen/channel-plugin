@@ -15,7 +15,7 @@ import (
 type Client interface {
 	CreateBindingSession(ctx context.Context, bindingID string) (CreateSessionResult, error)
 	GetBindingSession(ctx context.Context, providerRef string) (GetSessionResult, error)
-	GetMessages(ctx context.Context, lastMsgID string) ([]Message, error)
+	GetMessagesLongPoll(ctx context.Context, lastMsgID string, timeout time.Duration) ([]Message, error)
 }
 
 type Message struct {
@@ -478,6 +478,8 @@ func (c *HTTPClient) GetBindingSession(ctx context.Context, providerRef string) 
 	return executeGetBindingSession(c.client, req)
 }
 
-func (c *HTTPClient) GetMessages(ctx context.Context, lastMsgID string) ([]Message, error) {
+func (c *HTTPClient) GetMessagesLongPoll(ctx context.Context, lastMsgID string, timeout time.Duration) ([]Message, error) {
+	// Implementation would call WeChat API with timeout
+	// For now, return empty to allow polling to retry
 	return []Message{}, nil
 }

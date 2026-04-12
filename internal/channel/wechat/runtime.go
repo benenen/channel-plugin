@@ -43,41 +43,8 @@ func (p *Provider) StartRuntime(ctx context.Context, req channel.StartRuntimeReq
 	go func() {
 		defer close(handle.done)
 
-		ticker := time.NewTicker(time.Duration(3) * time.Second)
-		defer ticker.Stop()
-
 		lastMsgID := ""
-
-		// Poll immediately once
-		pollMessages := func() {
-			messages, err := p.client.GetMessages(runtimeCtx, lastMsgID)
-			if err != nil {
-				if req.Callbacks.OnState != nil {
-					req.Callbacks.OnState(channel.RuntimeStateEvent{
-						BotID:       req.BotID,
-						ChannelType: req.ChannelType,
-						State:       channel.RuntimeStateError,
-						Err:         err,
-					})
-				}
-				return
-			}
-			for _, msg := range messages {
-				if req.Callbacks.OnEvent != nil {
-					req.Callbacks.OnEvent(channel.RuntimeEvent{
-						BotID:       req.BotID,
-						ChannelType: req.ChannelType,
-						MessageID:   msg.MsgID,
-						From:        msg.From,
-						Text:        msg.Text,
-						Raw:         msg.Raw,
-					})
-				}
-				lastMsgID = msg.MsgID
-			}
-		}
-
-		pollMessages()
+		pollTimeout := 30 * time.Second
 
 		for {
 			select {
@@ -91,8 +58,31 @@ func (p *Provider) StartRuntime(ctx context.Context, req channel.StartRuntimeReq
 					})
 				}
 				return
-			case <-ticker.C:
-				pollMessages()
+			default:
+				// Long poll with timeout
+				messages, err := p.client.GetMessagesLongPoll(runtimeCtx, lastMsgID, pollTimeout)
+				if err != nil {
+					// Context cancelled or other error
+					if runtimeCtx.Err() != nil {
+						return
+					}
+					// Timeout or network error, retry
+					continue
+				}
+				// Process received messages
+				for _, msg := range messages {
+					if req.Callbacks.OnEvent != nil {
+						req.Callbacks.OnEvent(channel.RuntimeEvent{
+							BotID:       req.BotID,
+							ChannelType: req.ChannelType,
+							MessageID:   msg.MsgID,
+							From:        msg.From,
+							Text:        msg.Text,
+							Raw:         msg.Raw,
+						})
+					}
+					lastMsgID = msg.MsgID
+				}
 			}
 		}
 	}()
