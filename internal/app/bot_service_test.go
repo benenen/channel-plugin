@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/benenen/myclaw/internal/channel"
 	"github.com/benenen/myclaw/internal/channel/wechat"
 	"github.com/benenen/myclaw/internal/domain"
 	"github.com/benenen/myclaw/internal/security"
@@ -11,7 +13,24 @@ import (
 	"github.com/benenen/myclaw/internal/testutil"
 )
 
-func newTestBotService(t *testing.T) *BotService {
+type failingRuntimeStarter struct{}
+
+func (failingRuntimeStarter) StartRuntime(context.Context, channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
+	return nil, errors.New("start runtime failed")
+}
+
+type runtimeStarterOverrideProvider struct {
+	*wechat.FakeProvider
+	starter channel.RuntimeStarter
+}
+
+func (p runtimeStarterOverrideProvider) StartRuntime(ctx context.Context, req channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
+	return p.starter.StartRuntime(ctx, req)
+}
+
+var _ channel.RuntimeStarter = runtimeStarterOverrideProvider{}
+
+func newTestBotServiceWithRuntimeStarter(t *testing.T, starter channel.RuntimeStarter) (*BotService, *wechat.FakeProvider) {
 	t.Helper()
 	db := testutil.OpenTestDB(t)
 	key := make([]byte, 32)
@@ -19,17 +38,58 @@ func newTestBotService(t *testing.T) *BotService {
 		key[i] = byte(i)
 	}
 	cipher, _ := security.NewCipher(key)
-	provider := wechat.NewFakeProvider()
+	baseProvider := wechat.NewFakeProvider()
+	provider := runtimeStarterOverrideProvider{FakeProvider: baseProvider, starter: starter}
+	bots := repositories.NewBotRepository(db)
+	accounts := repositories.NewChannelAccountRepository(db)
+	runtimes := NewBotConnectionManager(bots, accounts, provider)
 
 	return NewBotService(
 		repositories.NewUserRepository(db),
-		repositories.NewBotRepository(db),
+		bots,
 		repositories.NewChannelBindingRepository(db),
-		repositories.NewChannelAccountRepository(db),
+		accounts,
 		cipher,
 		provider,
+		runtimes,
+	), baseProvider
+}
+
+func newTestBotServiceWithProvider(t *testing.T, provider channel.Provider) *BotService {
+	t.Helper()
+	db := testutil.OpenTestDB(t)
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	cipher, _ := security.NewCipher(key)
+	bots := repositories.NewBotRepository(db)
+	accounts := repositories.NewChannelAccountRepository(db)
+	starter, _ := provider.(channel.RuntimeStarter)
+	runtimes := NewBotConnectionManager(bots, accounts, starter)
+
+	return NewBotService(
+		repositories.NewUserRepository(db),
+		bots,
+		repositories.NewChannelBindingRepository(db),
+		accounts,
+		cipher,
+		provider,
+		runtimes,
 	)
 }
+
+func newTestBotService(t *testing.T) *BotService {
+	provider := wechat.NewFakeProvider()
+	return newTestBotServiceWithProvider(t, provider)
+}
+
+func newTestBotServiceAndProvider(t *testing.T) (*BotService, *wechat.FakeProvider) {
+	provider := wechat.NewFakeProvider()
+	return newTestBotServiceWithProvider(t, provider), provider
+}
+
+
 
 func TestBotServiceCreateBot(t *testing.T) {
 	svc := newTestBotService(t)
@@ -355,6 +415,85 @@ func TestBotServiceRefreshLoginConfirmsBotAndLinksAccount(t *testing.T) {
 	}
 	if storedBot.ConnectionStatus != domain.BotConnectionStatusConnected {
 		t.Fatalf("unexpected bot connection status: %s", storedBot.ConnectionStatus)
+	}
+}
+
+func TestBotServiceRefreshLoginStartsRuntimeAfterConfirm(t *testing.T) {
+	svc, provider := newTestBotServiceAndProvider(t)
+	bot, err := svc.CreateBot(context.Background(), CreateBotInput{
+		ExternalUserID: "u_123",
+		Name:           "bot one",
+		ChannelType:    "wechat",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started, err := svc.StartLogin(context.Background(), StartBotLoginInput{BotID: bot.BotID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := svc.bindings.GetByID(context.Background(), started.BindingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider.SimulateConfirm(binding.ProviderBindingRef)
+
+	if _, err := svc.RefreshLogin(context.Background(), started.BindingID); err != nil {
+		t.Fatal(err)
+	}
+
+	if !provider.RuntimeStarted(bot.BotID) {
+		t.Fatal("expected runtime to start after confirmed login")
+	}
+}
+
+func TestBotServiceRefreshLoginMarksBotErrorWhenRuntimeStartFails(t *testing.T) {
+	svc, provider := newTestBotServiceWithRuntimeStarter(t, failingRuntimeStarter{})
+	bot, err := svc.CreateBot(context.Background(), CreateBotInput{
+		ExternalUserID: "u_123",
+		Name:           "bot one",
+		ChannelType:    "wechat",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started, err := svc.StartLogin(context.Background(), StartBotLoginInput{BotID: bot.BotID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := svc.bindings.GetByID(context.Background(), started.BindingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider.SimulateConfirm(binding.ProviderBindingRef)
+
+	_, err = svc.RefreshLogin(context.Background(), started.BindingID)
+	if err == nil || err.Error() != "start runtime failed" {
+		t.Fatalf("expected runtime start failure, got %v", err)
+	}
+
+	storedBot, err := svc.bots.GetByID(context.Background(), bot.BotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedBot.ConnectionStatus != domain.BotConnectionStatusError {
+		t.Fatalf("unexpected bot connection status: %s", storedBot.ConnectionStatus)
+	}
+	if storedBot.ConnectionError != "start runtime failed" {
+		t.Fatalf("unexpected bot connection error: %s", storedBot.ConnectionError)
+	}
+
+	storedBinding, err := svc.bindings.GetByID(context.Background(), started.BindingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedBinding.Status != domain.BindingStatusConfirmed {
+		t.Fatalf("unexpected binding status: %s", storedBinding.Status)
+	}
+	if storedBinding.ChannelAccountID == "" {
+		t.Fatal("expected binding channel account id")
 	}
 }
 

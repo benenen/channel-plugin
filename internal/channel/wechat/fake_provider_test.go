@@ -74,3 +74,27 @@ func TestFakeProviderBuildRuntimeConfig(t *testing.T) {
 		t.Fatal("expected credential_blob in runtime config")
 	}
 }
+
+func TestFakeProviderStartRuntimeEmitsConnectedState(t *testing.T) {
+	provider := NewFakeProvider()
+	connected := false
+
+	handle, err := provider.StartRuntime(context.Background(), channel.StartRuntimeRequest{
+		BotID:       "bot_1",
+		ChannelType: "wechat",
+		Callbacks: channel.RuntimeCallbacks{
+			OnState: func(event channel.RuntimeStateEvent) {
+				if event.State == channel.RuntimeStateConnected {
+					connected = true
+				}
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer handle.Stop()
+	if !connected {
+		t.Fatal("expected connected state event")
+	}
+}

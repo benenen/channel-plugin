@@ -56,6 +56,34 @@ func TestHTTPClientCreateBindingSessionReturnsErrorWhenBotTypeMissing(t *testing
 	}
 }
 
+func TestHTTPClientCreateBindingSessionNormalizesNestedAndBase64FieldsFromDataEnvelope(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{"ticket":"ticket_nested_client_1","url":"weixin://ticket_nested_client_1","qr_base64":"data:image/png;base64,client123"}}`))
+	}))
+	defer ts.Close()
+
+	client := NewHTTPClient(Config{ReferenceBaseURL: ts.URL})
+	result, err := client.CreateBindingSession(context.Background(), "bind_nested_client_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/ilink/bot/get_bot_qrcode" {
+		t.Fatalf("unexpected path: %s", gotPath)
+	}
+	if result.Ticket != "ticket_nested_client_1" {
+		t.Fatalf("unexpected ticket: %q", result.Ticket)
+	}
+	if result.URL != "weixin://ticket_nested_client_1" {
+		t.Fatalf("unexpected url: %q", result.URL)
+	}
+	if result.QRCodeURL != "data:image/png;base64,client123" {
+		t.Fatalf("unexpected qrcode url: %q", result.QRCodeURL)
+	}
+}
+
 func TestHTTPClientGetBindingSession(t *testing.T) {
 	var gotPath string
 	var gotQRCode string

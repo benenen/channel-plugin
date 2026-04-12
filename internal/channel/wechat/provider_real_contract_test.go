@@ -172,6 +172,37 @@ func TestProviderCreateBindingUsesBase64ImagePayload(t *testing.T) {
 	}
 }
 
+func TestProviderCreateBindingPreservesBase64QRCodeURLPayload(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"qrcode":"qr_base64_url_1","qrcode_url":"data:image/png;base64,already_encoded"}`))
+	}))
+	defer ts.Close()
+
+	provider := NewProvider(NewHTTPClient(Config{ReferenceBaseURL: ts.URL}))
+	result, err := provider.CreateBinding(context.Background(), channel.CreateBindingRequest{
+		BindingID:   "bind_base64_url_1",
+		ChannelType: "wechat",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/ilink/bot/get_bot_qrcode" {
+		t.Fatalf("unexpected path: %s", gotPath)
+	}
+	if result.ProviderBindingRef != "qr_base64_url_1" {
+		t.Fatalf("unexpected provider binding ref: %q", result.ProviderBindingRef)
+	}
+	if result.QRCodePayload != "data:image/png;base64,already_encoded" {
+		t.Fatalf("unexpected qr payload: %q", result.QRCodePayload)
+	}
+	if result.QRShareURL != "data:image/png;base64,already_encoded" {
+		t.Fatalf("unexpected qr share url: %q", result.QRShareURL)
+	}
+}
+
 func TestProviderCreateBindingReturnsGeneratedQRBase64(t *testing.T) {
 	const qrToken = "71ee191ef81e7d014e489500a14c87df"
 	const qrImageContent = "https://liteapp.weixin.qq.com/q/7GiQu1?qrcode=71ee191ef81e7d014e489500a14c87df&bot_type=3"
@@ -211,6 +242,34 @@ func TestProviderCreateBindingReturnsGeneratedQRBase64(t *testing.T) {
 	}
 	if result.QRShareURL != qrImageContent {
 		t.Fatalf("unexpected qr share url: %q", result.QRShareURL)
+	}
+}
+
+func TestHTTPClientCreateBindingSessionNormalizesNestedAndBase64Fields(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{"ticket":"ticket_nested_client_1","url":"weixin://ticket_nested_client_1","qr_base64":"data:image/png;base64,client123"}}`))
+	}))
+	defer ts.Close()
+
+	client := NewHTTPClient(Config{ReferenceBaseURL: ts.URL})
+	result, err := client.CreateBindingSession(context.Background(), "bind_nested_client_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/ilink/bot/get_bot_qrcode" {
+		t.Fatalf("unexpected path: %s", gotPath)
+	}
+	if result.Ticket != "ticket_nested_client_1" {
+		t.Fatalf("unexpected ticket: %q", result.Ticket)
+	}
+	if result.URL != "weixin://ticket_nested_client_1" {
+		t.Fatalf("unexpected url: %q", result.URL)
+	}
+	if result.QRCodeURL != "data:image/png;base64,client123" {
+		t.Fatalf("unexpected qrcode url: %q", result.QRCodeURL)
 	}
 }
 

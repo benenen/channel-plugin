@@ -60,6 +60,18 @@ func (r *BotRepository) ListByUserID(ctx context.Context, userID string) ([]doma
 	return items, nil
 }
 
+func (r *BotRepository) ListWithAccounts(ctx context.Context) ([]domain.Bot, error) {
+	var rows []models.Bot
+	if err := r.db.WithContext(ctx).Where("channel_account_id <> ''").Order("created_at desc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	items := make([]domain.Bot, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toDomainBot(row))
+	}
+	return items, nil
+}
+
 func (r *BotRepository) Update(ctx context.Context, bot domain.Bot) (domain.Bot, error) {
 	m := models.Bot{
 		ID:               bot.ID,

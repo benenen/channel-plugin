@@ -24,7 +24,7 @@ func (p *Provider) CreateBinding(ctx context.Context, req channel.CreateBindingR
 	if err != nil {
 		return channel.CreateBindingResult{}, fmt.Errorf("wechat create binding: %w", err)
 	}
-	qrPayload, err := renderQRCodeDataURL(result.qrShareURL())
+	qrPayload, err := createBindingQRCodePayload(result)
 	if err != nil {
 		return channel.CreateBindingResult{}, fmt.Errorf("wechat render qr: %w", err)
 	}
@@ -34,6 +34,19 @@ func (p *Provider) CreateBinding(ctx context.Context, req channel.CreateBindingR
 		QRShareURL:         result.qrShareURL(),
 		ExpiresAt:          result.normalizedExpiry(),
 	}, nil
+}
+
+func createBindingQRCodePayload(result CreateSessionResult) (string, error) {
+	if result.QRCodeImgContent != "" {
+		return renderQRCodeDataURL(result.QRCodeImgContent)
+	}
+	if result.QRCodeURL != "" {
+		return result.QRCodeURL, nil
+	}
+	if result.URL != "" {
+		return result.URL, nil
+	}
+	return result.qrPayload(), nil
 }
 
 func renderQRCodeDataURL(payload string) (string, error) {
