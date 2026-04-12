@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	qrcode "github.com/skip2/go-qrcode"
 
@@ -62,6 +63,7 @@ func (p *Provider) RefreshBinding(ctx context.Context, req channel.RefreshBindin
 	if err != nil {
 		return channel.RefreshBindingResult{}, fmt.Errorf("wechat refresh binding: %w", err)
 	}
+	log.Printf("wechat login_payload status=%s openid=%s credential_payload=%s", result.Status, result.OpenID, string(result.normalizedCredentialPayload()))
 	return channel.RefreshBindingResult{
 		ProviderStatus:    result.normalizedStatus(),
 		QRCodePayload:     result.qrPayload(),

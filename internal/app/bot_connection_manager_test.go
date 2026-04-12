@@ -3,10 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/benenen/myclaw/internal/channel"
+	"github.com/benenen/myclaw/internal/channel/wechat"
 	"github.com/benenen/myclaw/internal/domain"
 )
 
@@ -72,6 +75,29 @@ func TestBotConnectionManagerPassesStoredCredentialsToRuntime(t *testing.T) {
 	if starter.req.AccountUID != "wxid_1" {
 		t.Fatalf("unexpected account uid: %q", starter.req.AccountUID)
 	}
+	select {
+	case <-starter.ctx.Done():
+		t.Fatal("expected runtime to use detached context")
+	default:
+	}
+}
+
+func TestBotConnectionManagerDetachesRuntimeFromRequestContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	starter := &capturingRuntimeStarter{}
+	bots := newBotRepoStub(domain.Bot{ID: "bot_1", ChannelType: "wechat", ChannelAccountID: "acct_1"})
+	accounts := newAccountRepoStub(domain.ChannelAccount{ID: "acct_1", AccountUID: "wxid_1", CredentialCiphertext: []byte("cipher"), CredentialVersion: 2})
+	manager := NewBotConnectionManager(bots, accounts, starter)
+
+	if err := manager.Start(ctx, "bot_1"); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case <-starter.ctx.Done():
+		t.Fatal("expected runtime context to survive request cancellation")
+	default:
+	}
 }
 
 func TestBotConnectionManagerStartDoesNotHoldLockWhileStartingRuntime(t *testing.T) {
@@ -107,6 +133,51 @@ func TestBotConnectionManagerStartDoesNotHoldLockWhileStartingRuntime(t *testing
 		}
 	case <-time.After(time.Second):
 		t.Fatal("expected start to complete after releasing starter")
+	}
+}
+
+func TestBotConnectionManagerRejectsConcurrentStartWhileRuntimeStarting(t *testing.T) {
+	starter := &blockingRuntimeStarterStub{started: make(chan struct{}), release: make(chan struct{})}
+	manager := NewBotConnectionManager(nil, nil, starter)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- manager.Start(context.Background(), "bot_1")
+	}()
+
+	<-starter.started
+
+	if err := manager.Start(context.Background(), "bot_1"); err != ErrRuntimeAlreadyStarted {
+		t.Fatalf("expected ErrRuntimeAlreadyStarted during in-flight start, got %v", err)
+	}
+	if !manager.Active("bot_1") {
+		t.Fatal("expected bot_1 to be treated as active while runtime start is in progress")
+	}
+
+	close(starter.release)
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("expected first start to succeed, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected first start to complete after releasing starter")
+	}
+
+	if !manager.Active("bot_1") {
+		t.Fatal("expected bot_1 handle to remain tracked after runtime start completes")
+	}
+}
+
+func TestBotConnectionManagerClearsReservationWhenStartRuntimeFails(t *testing.T) {
+	manager := NewBotConnectionManager(nil, nil, &failingRuntimeStarterStub{})
+
+	if err := manager.Start(context.Background(), "bot_1"); err == nil {
+		t.Fatal("expected start to fail")
+	}
+	if manager.Active("bot_1") {
+		t.Fatal("expected failed start reservation to be cleared")
 	}
 }
 
@@ -154,15 +225,40 @@ func TestBotConnectionManagerMarksBotErrorOnErrorState(t *testing.T) {
 	if err := manager.Start(ctx, "bot_1"); err != nil {
 		t.Fatal(err)
 	}
-	if bots.bot.ConnectionStatus != domain.BotConnectionStatusError {
-		t.Fatalf("unexpected bot connection status: %s", bots.bot.ConnectionStatus)
-	}
+	waitFor(func() bool { return bots.bot.ConnectionStatus == domain.BotConnectionStatusError }, t)
 	if bots.bot.ConnectionError != "runtime failed" {
 		t.Fatalf("unexpected bot connection error: %s", bots.bot.ConnectionError)
 	}
-	if manager.Active("bot_1") {
-		t.Fatal("expected runtime handle to be cleared after error")
+	waitFor(func() bool { return !manager.Active("bot_1") }, t)
+}
+
+func TestBotConnectionManagerMarksBotLoginRequiredOnSessionExpired(t *testing.T) {
+	ctx := context.Background()
+	starter := &eventingRuntimeStarter{emitError: true, err: fmt.Errorf("%w: getupdates failed", wechat.ErrSessionExpired)}
+	bots := newBotRepoStub(domain.Bot{ID: "bot_1", ChannelType: "wechat", ChannelAccountID: "acct_1", ConnectionStatus: domain.BotConnectionStatusConnecting})
+	accounts := newAccountRepoStub(domain.ChannelAccount{ID: "acct_1", AccountUID: "wxid_1", CredentialCiphertext: []byte(`{"openid":"wxid_1"}`), CredentialVersion: 1})
+	manager := NewBotConnectionManager(bots, accounts, starter)
+
+	if err := manager.Start(ctx, "bot_1"); err != nil {
+		t.Fatal(err)
 	}
+	waitFor(func() bool { return bots.bot.ConnectionStatus == domain.BotConnectionStatusLoginRequired }, t)
+	if !strings.Contains(bots.bot.ConnectionError, "wechat session expired") {
+		t.Fatalf("unexpected session expiry error message: %s", bots.bot.ConnectionError)
+	}
+	waitFor(func() bool { return !manager.Active("bot_1") }, t)
+}
+
+func waitFor(check func() bool, t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if check() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition not met in time")
 }
 
 type blockingRuntimeStarterStub struct {
@@ -176,11 +272,19 @@ func (s *blockingRuntimeStarterStub) StartRuntime(_ context.Context, _ channel.S
 	return &runtimeHandleStub{done: make(chan struct{})}, nil
 }
 
+type failingRuntimeStarterStub struct{}
+
+func (s *failingRuntimeStarterStub) StartRuntime(_ context.Context, _ channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
+	return nil, errors.New("start failed")
+}
+
 type capturingRuntimeStarter struct {
+	ctx context.Context
 	req channel.StartRuntimeRequest
 }
 
-func (s *capturingRuntimeStarter) StartRuntime(_ context.Context, req channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
+func (s *capturingRuntimeStarter) StartRuntime(ctx context.Context, req channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
+	s.ctx = ctx
 	s.req = req
 	return &runtimeHandleStub{done: make(chan struct{})}, nil
 }
@@ -188,6 +292,7 @@ func (s *capturingRuntimeStarter) StartRuntime(_ context.Context, req channel.St
 type eventingRuntimeStarter struct {
 	lastHandle *runtimeHandleStub
 	emitError  bool
+	err        error
 }
 
 func (s *eventingRuntimeStarter) StartRuntime(_ context.Context, req channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
@@ -203,7 +308,11 @@ func (s *eventingRuntimeStarter) StartRuntime(_ context.Context, req channel.Sta
 	if req.Callbacks.OnState != nil {
 		req.Callbacks.OnState(channel.RuntimeStateEvent{BotID: req.BotID, ChannelType: req.ChannelType, State: channel.RuntimeStateConnected})
 		if s.emitError {
-			req.Callbacks.OnState(channel.RuntimeStateEvent{BotID: req.BotID, ChannelType: req.ChannelType, State: channel.RuntimeStateError, Err: errors.New("runtime failed")})
+			err := s.err
+			if err == nil {
+				err = errors.New("runtime failed")
+			}
+			go req.Callbacks.OnState(channel.RuntimeStateEvent{BotID: req.BotID, ChannelType: req.ChannelType, State: channel.RuntimeStateError, Err: err})
 		}
 	}
 	return handle, nil

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/benenen/myclaw/internal/channel"
+	"github.com/benenen/myclaw/internal/channel/wechat"
 	"github.com/benenen/myclaw/internal/domain"
 	"github.com/benenen/myclaw/internal/security"
 )
@@ -47,9 +48,22 @@ func (m *BotConnectionManager) Start(ctx context.Context, botID string) error {
 		m.mu.Unlock()
 		return ErrRuntimeAlreadyStarted
 	}
+	m.handles[botID] = nil
 	m.mu.Unlock()
 
-req := channel.StartRuntimeRequest{BotID: botID}
+	cleanupReserved := true
+	defer func() {
+		if !cleanupReserved {
+			return
+		}
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if handle, exists := m.handles[botID]; exists && handle == nil {
+			delete(m.handles, botID)
+		}
+	}()
+
+	req := channel.StartRuntimeRequest{BotID: botID}
 	if m.bots != nil && m.accounts != nil {
 		bot, err := m.bots.GetByID(ctx, botID)
 		if err != nil {
@@ -84,24 +98,24 @@ req := channel.StartRuntimeRequest{BotID: botID}
 		}
 	}
 
-	handle, err := m.starter.StartRuntime(ctx, req)
+	handle, err := m.starter.StartRuntime(context.Background(), req)
 	if err != nil {
 		return err
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, exists := m.handles[botID]; exists {
+	if current, exists := m.handles[botID]; !exists {
+		m.mu.Unlock()
+		handle.Stop()
+		return ErrRuntimeAlreadyStarted
+	} else if current != nil {
+		m.mu.Unlock()
 		handle.Stop()
 		return ErrRuntimeAlreadyStarted
 	}
 	m.handles[botID] = handle
-	if m.bots != nil && m.accounts != nil {
-		bot, err := m.bots.GetByID(ctx, botID)
-		if err == nil && bot.ConnectionStatus == domain.BotConnectionStatusError {
-			delete(m.handles, botID)
-		}
-	}
+	cleanupReserved = false
+	m.mu.Unlock()
 	return nil
 }
 
@@ -118,7 +132,11 @@ func (m *BotConnectionManager) handleState(bot domain.Bot, ev channel.RuntimeSta
 		bot.ConnectionError = ""
 		_, _ = m.bots.Update(context.Background(), bot)
 	case channel.RuntimeStateError:
-		bot.ConnectionStatus = domain.BotConnectionStatusError
+		if errors.Is(ev.Err, wechat.ErrSessionExpired) {
+			bot.ConnectionStatus = domain.BotConnectionStatusLoginRequired
+		} else {
+			bot.ConnectionStatus = domain.BotConnectionStatusError
+		}
 		if ev.Err != nil {
 			bot.ConnectionError = ev.Err.Error()
 		}

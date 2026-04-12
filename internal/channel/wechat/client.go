@@ -3,10 +3,13 @@ package wechat
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"time"
@@ -15,7 +18,7 @@ import (
 type Client interface {
 	CreateBindingSession(ctx context.Context, bindingID string) (CreateSessionResult, error)
 	GetBindingSession(ctx context.Context, providerRef string) (GetSessionResult, error)
-	GetMessagesLongPoll(ctx context.Context, lastMsgID string, timeout time.Duration) ([]Message, error)
+	GetMessagesLongPoll(ctx context.Context, opts GetUpdatesOptions) (GetUpdatesResult, error)
 }
 
 type Message struct {
@@ -25,6 +28,58 @@ type Message struct {
 	Text    string
 	Raw     []byte
 	Created int64
+}
+
+type GetUpdatesOptions struct {
+	BaseURL   string
+	Token     string
+	WechatUIN string
+	Cursor    string
+	Timeout   time.Duration
+}
+
+type GetUpdatesResult struct {
+	Messages       []Message
+	Cursor         string
+	NextTimeout    time.Duration
+	Ret            int `json:"ret"`
+	ErrCode        int `json:"errcode"`
+	ErrMsg         string `json:"errmsg"`
+}
+
+type getUpdatesRequest struct {
+	GetUpdatesBuf string `json:"get_updates_buf"`
+	BaseInfo      struct {
+		ChannelVersion string `json:"channel_version"`
+	} `json:"base_info"`
+}
+
+type getUpdatesResponse struct {
+	Ret               int                `json:"ret"`
+	ErrCode           int                `json:"errcode"`
+	ErrMsg            string             `json:"errmsg"`
+	Messages          []weixinMessage    `json:"msgs"`
+	GetUpdatesBuf     string             `json:"get_updates_buf"`
+	SyncBuf           string             `json:"sync_buf"`
+	LongPollingMS     int                `json:"longpolling_timeout_ms"`
+}
+
+type weixinMessage struct {
+	MessageID    int64         `json:"message_id"`
+	FromUserID   string        `json:"from_user_id"`
+	ToUserID     string        `json:"to_user_id"`
+	CreateTimeMS int64         `json:"create_time_ms"`
+	ItemList     []messageItem `json:"item_list"`
+}
+
+type messageItem struct {
+	Type     int       `json:"type"`
+	MsgID    string    `json:"msg_id"`
+	TextItem *textItem `json:"text_item"`
+}
+
+type textItem struct {
+	Text string `json:"text"`
 }
 
 type CreateSessionResult struct {
@@ -122,6 +177,10 @@ type GetSessionResult struct {
 	OpenID            string          `json:"openid"`
 	Nickname          string          `json:"nickname"`
 	AvatarURL         string          `json:"avatar_url"`
+	BaseURL           string          `json:"baseurl"`
+	BotToken          string          `json:"bot_token"`
+	ILinkBotID        string          `json:"ilink_bot_id"`
+	ILinkUserID       string          `json:"ilink_user_id"`
 	CredentialPayload json.RawMessage `json:"credential_payload"`
 	CredentialVersion int             `json:"credential_version"`
 	ErrorMessage      string          `json:"error_message"`
@@ -135,6 +194,9 @@ func (r GetSessionResult) qrPayload() string {
 }
 
 func (r GetSessionResult) accountUID() string {
+	if r.ILinkUserID != "" {
+		return r.ILinkUserID
+	}
 	return r.OpenID
 }
 
@@ -156,9 +218,13 @@ func (r GetSessionResult) normalizedCredentialPayload() json.RawMessage {
 		return r.CredentialPayload
 	}
 	payload, _ := json.Marshal(map[string]any{
-		"openid":   r.OpenID,
-		"nickname": r.Nickname,
-		"avatar":   r.AvatarURL,
+		"openid":        r.OpenID,
+		"nickname":      r.Nickname,
+		"avatar":        r.AvatarURL,
+		"baseurl":       r.BaseURL,
+		"bot_token":     r.BotToken,
+		"ilink_bot_id":  r.ILinkBotID,
+		"ilink_user_id": r.ILinkUserID,
 	})
 	return payload
 }
@@ -189,10 +255,21 @@ func buildQRCodeStatusURL(baseURL, qrcode string) string {
 	return baseURL + "/ilink/bot/get_qrcode_status?" + values.Encode()
 }
 
-func attachAuth(req *http.Request, authToken string) {
-	if authToken != "" {
-		req.Header.Set("Authorization", "Bearer "+authToken)
+func attachAuth(req *http.Request, authToken, wechatUIN string) {
+	if authToken == "" {
+		return
 	}
+	req.Header.Set("AuthorizationType", "ilink_bot_token")
+	req.Header.Set("Authorization", "Bearer "+authToken)
+	if wechatUIN != "" {
+		req.Header.Set("X-WECHAT-UIN", wechatUIN)
+	}
+}
+
+func randomWechatUIN() string {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, rand.Uint32())
+	return base64.StdEncoding.EncodeToString(buf)
 }
 
 func decodeJSONResponse[T any](resp *http.Response, action string) (T, error) {
@@ -286,7 +363,7 @@ func createBindingRequestWithAuth(ctx context.Context, baseURL, authToken string
 	if err != nil {
 		return nil, err
 	}
-	attachAuth(req, authToken)
+	attachAuth(req, authToken, "")
 	return req, nil
 }
 
@@ -295,7 +372,7 @@ func getBindingRequestWithAuth(ctx context.Context, baseURL, authToken, qrcode s
 	if err != nil {
 		return nil, err
 	}
-	attachAuth(req, authToken)
+	attachAuth(req, authToken, "")
 	return req, nil
 }
 
@@ -374,7 +451,7 @@ func sessionQRCode(providerRef string) string {
 }
 
 func authRequest(req *http.Request, authToken string) {
-	attachAuth(req, authToken)
+	attachAuth(req, authToken, "")
 }
 
 func httpActionCreateBinding() string { return createBindingActionName() }
@@ -478,8 +555,86 @@ func (c *HTTPClient) GetBindingSession(ctx context.Context, providerRef string) 
 	return executeGetBindingSession(c.client, req)
 }
 
-func (c *HTTPClient) GetMessagesLongPoll(ctx context.Context, lastMsgID string, timeout time.Duration) ([]Message, error) {
-	// Implementation would call WeChat API with timeout
-	// For now, return empty to allow polling to retry
-	return []Message{}, nil
+func (c *HTTPClient) GetMessagesLongPoll(ctx context.Context, opts GetUpdatesOptions) (GetUpdatesResult, error) {
+	body := getUpdatesRequest{GetUpdatesBuf: opts.Cursor}
+	body.BaseInfo.ChannelVersion = "1.0.0"
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return GetUpdatesResult{}, fmt.Errorf("marshal getupdates request: %w", err)
+	}
+
+	baseURL := c.baseURL
+	if opts.BaseURL != "" {
+		baseURL = opts.BaseURL
+	}
+	token := c.authToken
+	if opts.Token != "" {
+		token = opts.Token
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/ilink/bot/getupdates", bytes.NewReader(payload))
+	if err != nil {
+		return GetUpdatesResult{}, fmt.Errorf("create getupdates request: %w", err)
+	}
+	log.Printf("wechat getupdates request url=%s timeout=%s cursor_len=%d", req.URL.String(), opts.Timeout, len(opts.Cursor))
+	req.Header.Set("Content-Type", "application/json")
+	attachAuth(req, token, opts.WechatUIN)
+
+	client := &http.Client{Timeout: opts.Timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("wechat getupdates transport_error: %v", err)
+		return GetUpdatesResult{}, fmt.Errorf("getupdates request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return GetUpdatesResult{}, fmt.Errorf("read getupdates response: %w", err)
+	}
+	log.Printf("wechat getupdates response status=%d body=%s", resp.StatusCode, string(bodyBytes))
+
+	var raw getUpdatesResponse
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+		return GetUpdatesResult{}, fmt.Errorf("decode getupdates response: %w", err)
+	}
+	if raw.Ret != 0 || raw.ErrCode != 0 {
+		return GetUpdatesResult{Ret: raw.Ret, ErrCode: raw.ErrCode, ErrMsg: raw.ErrMsg}, fmt.Errorf("getupdates failed: ret=%d errcode=%d errmsg=%s", raw.Ret, raw.ErrCode, raw.ErrMsg)
+	}
+
+	result := GetUpdatesResult{
+		Cursor:      raw.GetUpdatesBuf,
+		NextTimeout: time.Duration(raw.LongPollingMS) * time.Millisecond,
+		Ret:         raw.Ret,
+		ErrCode:     raw.ErrCode,
+		ErrMsg:      raw.ErrMsg,
+	}
+	if result.Cursor == "" {
+		result.Cursor = raw.SyncBuf
+	}
+	for _, msg := range raw.Messages {
+		parsed := Message{
+			MsgID:   fmt.Sprintf("%d", msg.MessageID),
+			From:    msg.FromUserID,
+			Created: msg.CreateTimeMS,
+		}
+		for _, item := range msg.ItemList {
+			if item.MsgID != "" {
+				parsed.MsgID = item.MsgID
+			}
+			if item.TextItem != nil && item.TextItem.Text != "" {
+				if parsed.Text != "" {
+					parsed.Text += "\n"
+				}
+				parsed.Text += item.TextItem.Text
+				parsed.MsgType = "text"
+			}
+		}
+		rawBytes, _ := json.Marshal(msg)
+		parsed.Raw = rawBytes
+		if parsed.MsgID != "" && parsed.Text != "" {
+			result.Messages = append(result.Messages, parsed)
+		}
+	}
+	return result, nil
 }
