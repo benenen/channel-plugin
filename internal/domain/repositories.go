@@ -22,5 +22,6 @@ type BotRepository interface {
 	Create(ctx context.Context, bot Bot) (Bot, error)
 	GetByID(ctx context.Context, id string) (Bot, error)
 	ListByUserID(ctx context.Context, userID string) ([]Bot, error)
+	ListWithAccounts(ctx context.Context) ([]Bot, error)
 	Update(ctx context.Context, bot Bot) (Bot, error)
 }

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	stdhttp "net/http"
 
 	"github.com/benenen/myclaw/internal/api/http/handlers"
@@ -8,6 +9,7 @@ import (
 	"github.com/benenen/myclaw/internal/app"
 	"github.com/benenen/myclaw/internal/channel/wechat"
 	"github.com/benenen/myclaw/internal/config"
+	"github.com/benenen/myclaw/internal/domain"
 	"github.com/benenen/myclaw/internal/security"
 	"github.com/benenen/myclaw/internal/store"
 	"github.com/benenen/myclaw/internal/store/repositories"
@@ -46,7 +48,8 @@ func New(cfg config.Config) (*App, error) {
 	provider := wechat.NewProvider(wechatClient)
 
 	// Application services
-	botSvc := app.NewBotService(userRepo, botRepo, bindingRepo, accountRepo, cipher, provider)
+	botManager := app.NewBotConnectionManager(botRepo, accountRepo, provider)
+	botSvc := app.NewBotService(userRepo, botRepo, bindingRepo, accountRepo, cipher, provider, botManager)
 
 	// HTTP
 	mux := stdhttp.NewServeMux()
@@ -61,6 +64,24 @@ func New(cfg config.Config) (*App, error) {
 	handlers.RegisterRoutes(mux, handlers.Dependencies{
 		BotService: botSvc,
 	})
+
+	go func() {
+		ctx := context.Background()
+		bots, err := botRepo.ListWithAccounts(ctx)
+		if err != nil {
+			return
+		}
+		for _, bot := range bots {
+			if bot.ChannelAccountID == "" {
+				continue
+			}
+			bot.ConnectionStatus = domain.BotConnectionStatusConnecting
+			if _, err := botRepo.Update(ctx, bot); err != nil {
+				continue
+			}
+			_ = botManager.Start(ctx, bot.ID)
+		}
+	}()
 
 	return &App{
 		Config:  cfg,

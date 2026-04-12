@@ -16,6 +16,7 @@ type BotService struct {
 	accounts domain.ChannelAccountRepository
 	cipher   *security.Cipher
 	provider channel.Provider
+	runtimes *BotConnectionManager
 }
 
 func NewBotService(
@@ -25,6 +26,7 @@ func NewBotService(
 	accounts domain.ChannelAccountRepository,
 	cipher *security.Cipher,
 	provider channel.Provider,
+	runtimes *BotConnectionManager,
 ) *BotService {
 	return &BotService{
 		users:    users,
@@ -33,6 +35,7 @@ func NewBotService(
 		accounts: accounts,
 		cipher:   cipher,
 		provider: provider,
+		runtimes: runtimes,
 	}
 }
 
@@ -43,11 +46,11 @@ type CreateBotInput struct {
 }
 
 type CreateBotOutput struct {
-	BotID             string
-	Name              string
-	ChannelType       string
-	ConnectionStatus  string
-	ChannelAccountID  string
+	BotID            string
+	Name             string
+	ChannelType      string
+	ConnectionStatus string
+	ChannelAccountID string
 }
 
 func (s *BotService) CreateBot(ctx context.Context, input CreateBotInput) (CreateBotOutput, error) {
@@ -154,11 +157,21 @@ func (s *BotService) RefreshLogin(ctx context.Context, bindingID string) (Refres
 		binding.ChannelAccountID = account.ID
 		binding.FinishedAt = &now
 		bot.ChannelAccountID = account.ID
-		bot.ConnectionStatus = domain.BotConnectionStatusConnected
+		bot.ConnectionStatus = domain.BotConnectionStatusConnecting
 		bot.ConnectionError = ""
-		bot.LastConnectedAt = &now
 		if _, err := s.bots.Update(ctx, bot); err != nil {
 			return RefreshBotLoginOutput{}, err
+		}
+		if s.runtimes != nil {
+			if err := s.runtimes.Start(ctx, bot.ID); err != nil {
+				if _, updateErr := s.bindings.Update(ctx, binding); updateErr != nil {
+					return RefreshBotLoginOutput{}, updateErr
+				}
+				bot.ConnectionStatus = domain.BotConnectionStatusError
+				bot.ConnectionError = err.Error()
+				_, _ = s.bots.Update(ctx, bot)
+				return RefreshBotLoginOutput{}, err
+			}
 		}
 	} else if result.ProviderStatus == domain.BindingStatusFailed || result.ProviderStatus == domain.BindingStatusExpired {
 		now := time.Now().UTC()

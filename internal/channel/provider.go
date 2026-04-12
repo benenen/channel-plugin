@@ -46,3 +46,51 @@ type BuildRuntimeConfigRequest struct {
 }
 
 type RuntimeConfig map[string]any
+
+type RuntimeEvent struct {
+	BotID       string
+	ChannelType string
+	MessageID   string
+	From        string
+	Text        string
+	Raw         []byte
+}
+
+type RuntimeState string
+
+const (
+	RuntimeStateConnected RuntimeState = "connected"
+	RuntimeStateError     RuntimeState = "error"
+	RuntimeStateStopped   RuntimeState = "stopped"
+)
+
+type RuntimeStateEvent struct {
+	BotID       string
+	ChannelType string
+	State       RuntimeState
+	Err         error
+	Reason      string
+}
+
+type RuntimeCallbacks struct {
+	OnEvent func(RuntimeEvent)
+	OnState func(RuntimeStateEvent)
+}
+
+type StartRuntimeRequest struct {
+	BotID             string
+	ChannelType       string
+	AccountUID        string
+	CredentialPayload []byte
+	CredentialVersion int
+	Callbacks         RuntimeCallbacks
+}
+
+type RuntimeHandle interface {
+	Stop()
+	Done() <-chan struct{}
+}
+
+type RuntimeStarter interface {
+	StartRuntime(ctx context.Context, req StartRuntimeRequest) (RuntimeHandle, error)
+}

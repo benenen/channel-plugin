@@ -18,12 +18,50 @@ type Client interface {
 }
 
 type CreateSessionResult struct {
-	QRCode          string    `json:"qrcode"`
-	QRCodeURL       string    `json:"qrcode_url"`
-	QRCodeImgContent string   `json:"qrcode_img_content"`
-	Ticket          string    `json:"ticket"`
-	URL             string    `json:"url"`
-	ExpiresAt       time.Time `json:"expires_at"`
+	QRCode           string              `json:"qrcode"`
+	QRCodeURL        string              `json:"qrcode_url"`
+	QRCodeImgContent string              `json:"qrcode_img_content"`
+	QRBase64         string              `json:"qr_base64"`
+	Ticket           string              `json:"ticket"`
+	URL              string              `json:"url"`
+	ExpiresAt        time.Time           `json:"expires_at"`
+	Data             *CreateSessionResult `json:"data"`
+}
+
+func (r CreateSessionResult) normalized() CreateSessionResult {
+	if r.Data == nil {
+		if r.QRBase64 != "" && r.QRCodeURL == "" {
+			r.QRCodeURL = r.QRBase64
+		}
+		return r
+	}
+	data := r.Data.normalized()
+	if r.QRCode == "" {
+		r.QRCode = data.QRCode
+	}
+	if r.QRCodeURL == "" {
+		r.QRCodeURL = data.QRCodeURL
+	}
+	if r.QRCodeImgContent == "" {
+		r.QRCodeImgContent = data.QRCodeImgContent
+	}
+	if r.QRBase64 == "" {
+		r.QRBase64 = data.QRBase64
+	}
+	if r.Ticket == "" {
+		r.Ticket = data.Ticket
+	}
+	if r.URL == "" {
+		r.URL = data.URL
+	}
+	if r.ExpiresAt.IsZero() {
+		r.ExpiresAt = data.ExpiresAt
+	}
+	if r.QRBase64 != "" && r.QRCodeURL == "" {
+		r.QRCodeURL = r.QRBase64
+	}
+		r.Data = nil
+	return r
 }
 
 func (r CreateSessionResult) providerRef() string {
@@ -221,7 +259,9 @@ func decodeGetSession(resp *http.Response) (GetSessionResult, error) {
 	return decodeJSONResponse[GetSessionResult](resp, getBindingActionName())
 }
 
-func normalizeCreateSession(result CreateSessionResult) CreateSessionResult { return mapCreateSessionResult(result) }
+func normalizeCreateSession(result CreateSessionResult) CreateSessionResult {
+	return mapCreateSessionResult(result.normalized())
+}
 func normalizeGetSession(result GetSessionResult) GetSessionResult          { return mapGetSessionResult(result) }
 
 func createBindingError(err error) error { return readRequestBody(createBindingActionName(), err) }

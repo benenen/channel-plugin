@@ -3,6 +3,7 @@ package wechat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,8 +11,9 @@ import (
 )
 
 type FakeProvider struct {
-	mu     sync.Mutex
-	states map[string]*fakeBindingState
+	mu              sync.Mutex
+	states          map[string]*fakeBindingState
+	runtimeStarted  map[string]bool
 }
 
 type fakeBindingState struct {
@@ -28,7 +30,8 @@ type fakeBindingState struct {
 
 func NewFakeProvider() *FakeProvider {
 	return &FakeProvider{
-		states: make(map[string]*fakeBindingState),
+		states:         make(map[string]*fakeBindingState),
+		runtimeStarted: make(map[string]bool),
 	}
 }
 
@@ -78,7 +81,9 @@ func (p *FakeProvider) RefreshBinding(_ context.Context, req channel.RefreshBind
 func (p *FakeProvider) BuildRuntimeConfig(_ context.Context, req channel.BuildRuntimeConfigRequest) (channel.RuntimeConfig, error) {
 	var payload map[string]any
 	if req.CredentialPayload != nil {
-		json.Unmarshal(req.CredentialPayload, &payload)
+		if err := json.Unmarshal(req.CredentialPayload, &payload); err != nil {
+			return nil, fmt.Errorf("unmarshal credential payload: %w", err)
+		}
 	}
 	return channel.RuntimeConfig{
 		"credential_blob": map[string]any{
@@ -89,6 +94,43 @@ func (p *FakeProvider) BuildRuntimeConfig(_ context.Context, req channel.BuildRu
 			"poll_interval_seconds": 3,
 		},
 	}, nil
+}
+
+func (p *FakeProvider) StartRuntime(_ context.Context, req channel.StartRuntimeRequest) (channel.RuntimeHandle, error) {
+	p.mu.Lock()
+	p.runtimeStarted[req.BotID] = true
+	p.mu.Unlock()
+
+	handle := &fakeRuntimeHandle{done: make(chan struct{})}
+	if req.Callbacks.OnState != nil {
+		req.Callbacks.OnState(channel.RuntimeStateEvent{
+			BotID:       req.BotID,
+			ChannelType: req.ChannelType,
+			State:       channel.RuntimeStateConnected,
+		})
+	}
+	return handle, nil
+}
+
+func (p *FakeProvider) RuntimeStarted(botID string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.runtimeStarted[botID]
+}
+
+type fakeRuntimeHandle struct {
+	done chan struct{}
+	once sync.Once
+}
+
+func (h *fakeRuntimeHandle) Stop() {
+	h.once.Do(func() {
+		close(h.done)
+	})
+}
+
+func (h *fakeRuntimeHandle) Done() <-chan struct{} {
+	return h.done
 }
 
 // SimulateConfirm simulates a successful login for testing.
@@ -110,3 +152,5 @@ func (p *FakeProvider) SimulateConfirm(providerBindingRef string) {
 	})
 	state.credentialVersion = 1
 }
+
+var _ channel.RuntimeStarter = (*FakeProvider)(nil)

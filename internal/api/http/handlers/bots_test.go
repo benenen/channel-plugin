@@ -34,7 +34,7 @@ func newTestServerWithProvider(t *testing.T) (*wechat.FakeProvider, stdhttp.Hand
 	botRepo := repositories.NewBotRepository(db)
 	mux := stdhttp.NewServeMux()
 	RegisterRoutes(mux, Dependencies{
-		BotService: app.NewBotService(userRepo, botRepo, bindingRepo, accountRepo, cipher, provider),
+		BotService: app.NewBotService(userRepo, botRepo, bindingRepo, accountRepo, cipher, provider, app.NewBotConnectionManager(botRepo, accountRepo, provider)),
 	})
 	return provider, mux
 }
