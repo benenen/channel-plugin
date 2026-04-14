@@ -332,15 +332,16 @@ func TestManagerReinitializesBrokenSession(t *testing.T) {
 }
 
 func TestManagerRecreatesSessionWhenSpecChangesDuringConcurrentLookup(t *testing.T) {
-	const driverName = "test-manager-concurrent-spec-change-driver"
-	initCalls := make(chan string, 4)
-	ready := make(chan struct{}, 2)
-	release := make(chan struct{})
+	driverName := "test-manager-concurrent-spec-change-driver-" + t.Name()
+	var (
+		initMu    sync.Mutex
+		initCalls []string
+	)
 	registerTestDriver(t, driverName, func() Driver {
 		return initStubDriver{init: func(_ context.Context, spec Spec) (SessionRuntime, error) {
-			initCalls <- spec.Command
-			ready <- struct{}{}
-			<-release
+			initMu.Lock()
+			initCalls = append(initCalls, spec.Command)
+			initMu.Unlock()
 			return runtimeStub{run: func(_ context.Context, req Request) (Response, error) {
 				return Response{Text: spec.Command + ":" + req.Prompt}, nil
 			}}, nil
@@ -361,14 +362,9 @@ func TestManagerRecreatesSessionWhenSpecChangesDuringConcurrentLookup(t *testing
 		}(spec)
 	}
 
-	<-ready
-	<-ready
-	release <- struct{}{}
-	release <- struct{}{}
 	wg.Wait()
 	close(responses)
 	close(errs)
-	close(initCalls)
 
 	seenResponses := map[string]bool{}
 	for resp := range responses {
@@ -380,9 +376,11 @@ func TestManagerRecreatesSessionWhenSpecChangesDuringConcurrentLookup(t *testing
 		}
 	}
 	seenInits := map[string]int{}
-	for command := range initCalls {
+	initMu.Lock()
+	for _, command := range initCalls {
 		seenInits[command]++
 	}
+	initMu.Unlock()
 	if seenInits["alpha"] == 0 || seenInits["beta"] == 0 {
 		t.Fatalf("init calls = %#v", seenInits)
 	}
@@ -397,6 +395,8 @@ func TestManagerRecreatesSessionWhenSpecChangesDuringConcurrentLookup(t *testing
 	if finalResp.Text != "beta:again" {
 		t.Fatalf("final resp.Text = %q", finalResp.Text)
 	}
+
+	unregisterTestDriver(driverName)
 }
 
 func registerTestDriver(t *testing.T, name string, factory DriverFactory) {
