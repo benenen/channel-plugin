@@ -6,10 +6,6 @@ import (
 	"sync"
 )
 
-type Driver interface {
-	Run(ctx context.Context, spec Spec, req Request) (Response, error)
-}
-
 type Session struct {
 	mu     sync.Mutex
 	state  SessionState

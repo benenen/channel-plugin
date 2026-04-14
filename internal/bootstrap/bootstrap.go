@@ -5,7 +5,6 @@ import (
 	stdhttp "net/http"
 	"time"
 
-	"github.com/benenen/myclaw/internal/agent"
 	"github.com/benenen/myclaw/internal/api/http/handlers"
 	"github.com/benenen/myclaw/internal/api/http/web"
 	"github.com/benenen/myclaw/internal/app/bot"
@@ -52,7 +51,6 @@ func New(cfg config.Config) (*App, error) {
 	wechatClient := wechat.NewHTTPClient(wechatCfg, logger)
 	provider := wechat.NewProvider(wechatClient, logger)
 
-	driver := agent.NewOneshotDriver()
 	replyGateway := wechat.NewReplyGateway(wechatClient)
 	resolver := bot.NewBotCLIResolver(botRepo, capabilityRepo, bot.BotCLIResolverConfig{Timeout: botCLITimeout})
 	orchestrator := bot.NewBotMessageOrchestrator(driver, replyGateway, resolver)
