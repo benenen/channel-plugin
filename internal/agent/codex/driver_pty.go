@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"sort"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/benenen/myclaw/internal/agent"
 	"github.com/creack/pty"
+	"github.com/hinshun/vt10x"
 )
 
 type PTYDriver struct{}
@@ -41,6 +43,7 @@ type PTYRuntime struct {
 	runMu      sync.Mutex
 	cmd        *exec.Cmd
 	ptyFile    *os.File
+	screen     vt10x.Terminal
 	state      runtimeState
 	notifyCh   chan struct{}
 	readErr    error
@@ -100,11 +103,14 @@ func (d *PTYDriver) Init(ctx context.Context, spec agent.Spec) (agent.SessionRun
 	runtime := &PTYRuntime{
 		cmd:      cmd,
 		ptyFile:  file,
+		screen:   vt10x.New(vt10x.WithSize(80, 24)),
 		state:    stateStarting,
 		notifyCh: make(chan struct{}, 1),
 		waitFunc: cmd.Wait,
 	}
 	go runtime.readLoop()
+
+	time.Sleep(50 * time.Second)
 
 	return runtime, nil
 }
@@ -231,6 +237,7 @@ func (r *PTYRuntime) Run(ctx context.Context, req agent.Request) (agent.Response
 	}
 
 	beforeLen := r.normalized.Len()
+	beforeScreen := snapshotTerminal(r.screen)
 	ptyFile := r.ptyFile
 	r.state = stateRunning
 	r.mu.Unlock()
@@ -283,7 +290,7 @@ func (r *PTYRuntime) Run(ctx context.Context, req agent.Request) (agent.Response
 		Text:      strings.TrimSpace(result.text),
 		ExitCode:  0,
 		Duration:  duration,
-		RawOutput: result.raw,
+		RawOutput: r.buildRawOutput(result.raw, beforeScreen),
 	}, nil
 }
 
@@ -375,6 +382,10 @@ func (r *PTYRuntime) readLoop() {
 			r.mu.Lock()
 			r.raw = append(r.raw, chunk...)
 			normalized := r.sanitizer.Write(&r.normalized, chunk)
+			if r.screen != nil {
+				_, _ = r.screen.Write(chunk)
+				log.Printf("pty read %d bytes, screen now:\n%s", n, snapshotTerminal(r.screen))
+			}
 			r.mu.Unlock()
 			if normalized != "" && debugPTYOutputEnabled() {
 				_, _ = os.Stderr.WriteString(normalized)
@@ -442,6 +453,55 @@ func (r *PTYRuntime) currentError() error {
 		return r.readErr
 	}
 	return fmt.Errorf("codex pty runtime is broken")
+}
+
+func (r *PTYRuntime) screenText() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return snapshotTerminal(r.screen)
+}
+
+func (r *PTYRuntime) buildRawOutput(transcript, beforeScreen string) string {
+	screen := diffScreenSnapshot(beforeScreen, r.screenText())
+	if screen == "" {
+		return transcript
+	}
+	var out strings.Builder
+	out.WriteString(transcript)
+	if !strings.HasSuffix(transcript, "\n") {
+		out.WriteByte('\n')
+	}
+	out.WriteString("screen:\n")
+	out.WriteString(screen)
+	if debugPTYOutputEnabled() {
+		_, _ = os.Stderr.WriteString("screen:\n" + screen + "\n")
+	}
+	return out.String()
+}
+
+func diffScreenSnapshot(before, after string) string {
+	after = strings.TrimRight(after, " \t\r\n")
+	before = strings.TrimRight(before, " \t\r\n")
+	if after == "" || after == before {
+		return ""
+	}
+	if before == "" {
+		return after
+	}
+	beforeLines := strings.Split(before, "\n")
+	afterLines := strings.Split(after, "\n")
+	common := 0
+	for common < len(beforeLines) && common < len(afterLines) && beforeLines[common] == afterLines[common] {
+		common++
+	}
+	return strings.TrimRight(strings.Join(afterLines[common:], "\n"), " \t\r\n")
+}
+
+func snapshotTerminal(term vt10x.Terminal) string {
+	if term == nil {
+		return ""
+	}
+	return strings.TrimRight(term.String(), " \t\r\n")
 }
 
 func normalizeOutput(text string) string {

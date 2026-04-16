@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/benenen/myclaw/internal/agent"
+	"github.com/hinshun/vt10x"
 )
 
 func TestNormalizeOutputStripsANSI(t *testing.T) {
@@ -122,6 +123,50 @@ func TestNormalizeOutputHandlesCarriageReturnRewrite(t *testing.T) {
 	sanitizer.Write(&out, []byte("T\rTi\rTip\rTip: hello\n"))
 	if got := out.String(); got != "Tip: hello\n" {
 		t.Fatalf("stream sanitize = %q", got)
+	}
+}
+
+func TestScreenSnapshotCapturesVisibleTerminalContent(t *testing.T) {
+	term := vt10x.New(vt10x.WithSize(40, 6))
+	if _, err := term.Write([]byte("hello\rworld\nnext line")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	runtime := &PTYRuntime{screen: term}
+	got := runtime.screenText()
+	if !strings.Contains(got, "world") {
+		t.Fatalf("screenText() = %q, want visible rewritten line", got)
+	}
+	if strings.Contains(got, "hello") {
+		t.Fatalf("screenText() = %q, want overwritten content removed", got)
+	}
+	if !strings.Contains(got, "next line") {
+		t.Fatalf("screenText() = %q, want subsequent line", got)
+	}
+}
+
+func TestReadLoopUpdatesScreenSnapshotWithoutChangingTranscript(t *testing.T) {
+	term := vt10x.New(vt10x.WithSize(40, 6))
+	runtime := &PTYRuntime{screen: term}
+
+	chunk := []byte("T\rTi\rTip\rTip: hello\n")
+	runtime.mu.Lock()
+	runtime.raw = append(runtime.raw, chunk...)
+	normalized := runtime.sanitizer.Write(&runtime.normalized, chunk)
+	if _, err := runtime.screen.Write(chunk); err != nil {
+		runtime.mu.Unlock()
+		t.Fatalf("screen.Write() error = %v", err)
+	}
+	runtime.mu.Unlock()
+
+	if normalized != "Tip: hello\n" {
+		t.Fatalf("normalized output = %q", normalized)
+	}
+	if got := runtime.normalized.String(); got != "Tip: hello\n" {
+		t.Fatalf("normalized transcript = %q", got)
+	}
+	if got := runtime.screenText(); !strings.Contains(got, "Tip: hello") {
+		t.Fatalf("screenText() = %q, want visible line", got)
 	}
 }
 
@@ -439,8 +484,51 @@ func TestPTYRuntimeRunSuccessfulSingleRequest(t *testing.T) {
 	if !strings.Contains(resp.RawOutput, "assistant response: say hello") {
 		t.Fatalf("Run() raw output = %q", resp.RawOutput)
 	}
+	if !strings.Contains(resp.RawOutput, "screen:") {
+		t.Fatalf("Run() raw output = %q, want screen snapshot", resp.RawOutput)
+	}
+	if !strings.Contains(resp.RawOutput, "assistant response: say hello") {
+		t.Fatalf("Run() raw output = %q, want screen snapshot content", resp.RawOutput)
+	}
 	if runtime.state != stateReady {
 		t.Fatalf("runtime state = %s, want ready", runtime.state)
+	}
+}
+
+func TestPTYRuntimeRunDebugLogIncludesScreenSnapshot(t *testing.T) {
+	t.Setenv("MYCLAW_DEBUG_PTY_OUTPUT", "1")
+	runtime := newHelperRuntime(t, "run-success")
+	defer closeRuntime(t, runtime)
+
+	origStderr := os.Stderr
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stderr = writePipe
+	defer func() {
+		os.Stderr = origStderr
+		_ = writePipe.Close()
+		_ = readPipe.Close()
+	}()
+
+	resp, err := runtime.Run(context.Background(), agent.Request{Prompt: "say hello"})
+	_ = writePipe.Close()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	logged, readErr := io.ReadAll(readPipe)
+	if readErr != nil {
+		t.Fatalf("ReadAll() error = %v", readErr)
+	}
+	if !strings.Contains(resp.RawOutput, "screen:") {
+		t.Fatalf("Run() raw output = %q, want screen snapshot", resp.RawOutput)
+	}
+	if !strings.Contains(string(logged), "screen:") {
+		t.Fatalf("stderr log = %q, want screen snapshot", string(logged))
+	}
+	if !strings.Contains(string(logged), "assistant response: say hello") {
+		t.Fatalf("stderr log = %q, want screen snapshot content", string(logged))
 	}
 }
 

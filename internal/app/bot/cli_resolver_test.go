@@ -65,15 +65,14 @@ func TestBotCLIResolverResolveUsesDedicatedCodexExecTimeout(t *testing.T) {
 		},
 	}}
 	resolver := NewBotCLIResolver(bots, capabilities, BotCLIResolverConfig{
-		Timeout:          45 * time.Second,
-		CodexExecTimeout: 5 * time.Minute,
+		Timeout: 45 * time.Second,
 	})
 
 	spec, err := resolver.Resolve(context.Background(), "bot_1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Timeout != 5*time.Minute {
+	if spec.Timeout != 45*time.Second {
 		t.Fatalf("unexpected timeout: %s", spec.Timeout)
 	}
 }

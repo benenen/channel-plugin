@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	botCLITimeout       = 60 * time.Second
-	botCodexExecTimeout = 10 * time.Minute
+	botCLITimeout = 60 * time.Minute
 )
 
 type App struct {
@@ -60,8 +59,7 @@ func New(cfg config.Config) (*App, error) {
 	executor := agent.NewManager()
 	replyGateway := wechat.NewReplyGateway(wechatClient)
 	resolver := bot.NewBotCLIResolver(botRepo, capabilityRepo, bot.BotCLIResolverConfig{
-		Timeout:          botCLITimeout,
-		CodexExecTimeout: botCodexExecTimeout,
+		Timeout: botCLITimeout,
 	})
 	orchestrator := bot.NewBotMessageOrchestrator(executor, replyGateway, resolver)
 	messageSimulator := bot.NewMessageSimulator(botRepo, accountRepo, cipher, orchestrator)
