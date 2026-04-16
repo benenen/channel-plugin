@@ -59,6 +59,8 @@ func (r *BotCLIResolver) Resolve(ctx context.Context, botID string) (agent.Spec,
 		return agent.Spec{}, ErrBotCLIConfigMissing
 	}
 	return agent.Spec{
+		BotID:   botID,
+		BotName: bot.Name,
 		Type:    bot.AgentMode,
 		Command: capability.Command,
 		Args:    append([]string(nil), capability.Args...),

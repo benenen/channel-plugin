@@ -3,8 +3,10 @@ module github.com/benenen/myclaw
 go 1.23.6
 
 require (
+	github.com/GianlucaP106/gotmux v0.5.0
 	github.com/creack/pty v1.1.21
 	github.com/golang-migrate/migrate/v4 v4.18.3
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	gorm.io/driver/sqlite v1.6.0
@@ -12,14 +14,11 @@ require (
 )
 
 require (
-	github.com/gabefiori/gotmux v0.0.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 )

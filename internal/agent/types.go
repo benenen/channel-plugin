@@ -13,6 +13,8 @@ const (
 )
 
 type Spec struct {
+	BotID     string
+	BotName   string
 	Type      string
 	Command   string
 	Args      []string

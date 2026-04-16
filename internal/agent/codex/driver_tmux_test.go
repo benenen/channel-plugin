@@ -3,12 +3,18 @@ package codex
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GianlucaP106/gotmux/gotmux"
 	"github.com/benenen/myclaw/internal/agent"
 )
+
+func TestTMUXDriverUsesForkedGotmuxModule(t *testing.T) {
+	_ = gotmux.SessionOptions{}
+}
 
 func TestTMUXDriverRegistersCodexTMUX(t *testing.T) {
 	driver, ok := agent.LookupDriver("codex-tmux")
@@ -28,20 +34,28 @@ func TestTMUXDriverInitRejectsEmptyCommand(t *testing.T) {
 	}
 }
 
-func TestTMUXRuntimeRunSuccessfulSingleRequest(t *testing.T) {
-	tmuxRunCounter.Store(0)
+func TestTMUXDriverInitUsesBotNameInSessionName(t *testing.T) {
+	factory := &captureSessionNameFactory{session: &fakeSession{}, pane: &fakePane{captures: []string{"codex>\n"}}}
+	driver := &TMUXDriver{factory: factory}
 
-	runtime := &TMUXRuntime{
-		state:  stateReady,
-		prompt: "codex>",
-		pane: &fakePane{
-			captures: []string{
-				"codex>\n",
-				"__MYCLAW_CODEX_RUN_BEGIN_1__\nassistant response: say hello\n__MYCLAW_CODEX_RUN_END_1__\ncodex>\n",
-			},
-		},
-		waitGap: time.Nanosecond,
+	_, err := driver.Init(context.Background(), agent.Spec{Type: "codex-tmux", Command: "/usr/local/bin/codex", BotName: "helper-bot"})
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
 	}
+	if factory.sessionName != "myclaw-codex-helper-bot" {
+		t.Fatalf("session name = %q", factory.sessionName)
+	}
+}
+
+func TestTMUXRuntimeRunSuccessfulSingleRequest(t *testing.T) {
+	runtime := &TMUXRuntime{
+		state: stateReady,
+		pane:  &fakePane{},
+	}
+
+	go func() {
+		runtime.pane.(*fakePane).captures = []string{"assistant response: say hello\ncodex>\n"}
+	}()
 
 	resp, err := runtime.Run(context.Background(), agent.Request{Prompt: "say hello"})
 	if err != nil {
@@ -54,7 +68,7 @@ func TestTMUXRuntimeRunSuccessfulSingleRequest(t *testing.T) {
 	if len(pane.sendCalls) != 1 {
 		t.Fatalf("SendKeys() calls = %d, want 1", len(pane.sendCalls))
 	}
-	want := []string{"__MYCLAW_CODEX_RUN_BEGIN_1__", "C-m", "say hello", "C-m", "__MYCLAW_CODEX_RUN_END_1__", "C-m"}
+	want := []string{"say hello", "C-m"}
 	for i, got := range pane.sendCalls[0] {
 		if got != want[i] {
 			t.Fatalf("SendKeys() arg[%d] = %q, want %q", i, got, want[i])
@@ -64,9 +78,8 @@ func TestTMUXRuntimeRunSuccessfulSingleRequest(t *testing.T) {
 
 func TestTMUXRuntimeRunMarksBrokenOnSendFailure(t *testing.T) {
 	runtime := &TMUXRuntime{
-		state:  stateReady,
-		prompt: "codex>",
-		pane:   &fakePane{sendErr: errors.New("send boom")},
+		state: stateReady,
+		pane:  &fakePane{sendErr: errors.New("send boom")},
 	}
 
 	_, err := runtime.Run(context.Background(), agent.Request{Prompt: "say hello"})
@@ -84,7 +97,6 @@ func TestTMUXRuntimeRunMarksBrokenOnSendFailure(t *testing.T) {
 func TestTMUXRuntimeRunMarksBrokenOnCaptureFailure(t *testing.T) {
 	runtime := &TMUXRuntime{
 		state:   stateReady,
-		prompt:  "codex>",
 		waitGap: time.Nanosecond,
 		pane: &fakePane{
 			captureErrAt: 0,
@@ -104,7 +116,6 @@ func TestTMUXRuntimeRunMarksBrokenOnCaptureFailure(t *testing.T) {
 func TestTMUXRuntimeRunMarksBrokenOnTimeout(t *testing.T) {
 	runtime := &TMUXRuntime{
 		state:   stateReady,
-		prompt:  "codex>",
 		waitGap: time.Nanosecond,
 		pane:    &fakePane{captures: []string{"still running\n", "still running\n"}},
 	}
@@ -125,7 +136,6 @@ func TestTMUXRuntimeCloseKillsSession(t *testing.T) {
 	session := &fakeSession{}
 	runtime := &TMUXRuntime{
 		state:   stateReady,
-		prompt:  "codex>",
 		pane:    &fakePane{},
 		session: session,
 	}
@@ -149,7 +159,6 @@ func TestTMUXRuntimeCloseReturnsKillFailureAndClearsState(t *testing.T) {
 	session := &fakeSession{killErr: wantErr}
 	runtime := &TMUXRuntime{
 		state:   stateReady,
-		prompt:  "codex>",
 		pane:    &fakePane{},
 		session: session,
 	}
@@ -187,7 +196,6 @@ func TestTMUXRuntimeCloseDoesNotHoldLockDuringKill(t *testing.T) {
 	}
 	runtime := &TMUXRuntime{
 		state:   stateReady,
-		prompt:  "codex>",
 		pane:    &fakePane{},
 		session: session,
 	}
@@ -218,9 +226,37 @@ func TestTMUXRuntimeCloseDoesNotHoldLockDuringKill(t *testing.T) {
 }
 
 func TestExtractTMUXRunResultRequiresRestoredPrompt(t *testing.T) {
-	_, err := extractTMUXRunResult("__MYCLAW_CODEX_RUN_BEGIN_1__\nhello\n__MYCLAW_CODEX_RUN_END_1__\n", "__MYCLAW_CODEX_RUN_BEGIN_1__", "__MYCLAW_CODEX_RUN_END_1__", "codex>")
+	_, err := extractTMUXRunResult("hello\n")
 	if err == nil || !strings.Contains(err.Error(), "prompt not restored") {
 		t.Fatalf("extractTMUXRunResult() error = %v", err)
+	}
+}
+
+func TestExecRuntimeUsesCodexRuntimeTypeConstant(t *testing.T) {
+	runtime := &ExecRuntime{spec: agent.Spec{
+		Type:    execDriverName,
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestHelperProcessCodexExecDriver", "--", "exec-success"},
+		Env:     map[string]string{"GO_WANT_HELPER_PROCESS": "1"},
+		Timeout: time.Second,
+	}}
+
+	resp, err := runtime.Run(context.Background(), agent.Request{Prompt: "你好"})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if resp.RuntimeType != runtimeTypeCodex {
+		t.Fatalf("Run() runtime type = %q", resp.RuntimeType)
+	}
+}
+
+func TestExtractTMUXRunResultReturnsTranscriptWithoutMarkers(t *testing.T) {
+	got, err := extractTMUXRunResult("assistant response: say hello\ncodex>\n")
+	if err != nil {
+		t.Fatalf("extractTMUXRunResult() error = %v", err)
+	}
+	if got != "assistant response: say hello" {
+		t.Fatalf("extractTMUXRunResult() = %q", got)
 	}
 }
 
@@ -233,10 +269,22 @@ type fakePane struct {
 	captureCalls int
 }
 
+type captureSessionNameFactory struct {
+	session     tmuxSession
+	pane        tmuxPane
+	err         error
+	sessionName string
+}
+
 type fakeSession struct {
 	killCalls int
 	killErr   error
 	kill      func() error
+}
+
+func (f *captureSessionNameFactory) Start(_ context.Context, _ agent.Spec, sessionName string) (tmuxSession, tmuxPane, error) {
+	f.sessionName = sessionName
+	return f.session, f.pane, f.err
 }
 
 func (p *fakePane) SendKeys(keys ...string) error {

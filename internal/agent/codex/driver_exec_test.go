@@ -90,7 +90,7 @@ func TestExecRuntimeRunReturnsLastCompletedItemText(t *testing.T) {
 	if resp.Text != "你好，有什么要我处理的？" {
 		t.Fatalf("Run() text = %q", resp.Text)
 	}
-	if resp.RuntimeType != "codex" {
+	if resp.RuntimeType != runtimeTypeCodex {
 		t.Fatalf("Run() runtime type = %q", resp.RuntimeType)
 	}
 	if !strings.Contains(resp.RawOutput, `"type":"item.completed"`) {
@@ -111,7 +111,7 @@ func TestExecRuntimeRunReturnsCodexErrorInResponseText(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run() error = nil")
 	}
-	if resp.RuntimeType != "codex" {
+	if resp.RuntimeType != runtimeTypeCodex {
 		t.Fatalf("Run() runtime type = %q", resp.RuntimeType)
 	}
 	if resp.Text != "unexpected status 503 Service Unavailable: Service temporarily unavailable" {

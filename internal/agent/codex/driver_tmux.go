@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/GianlucaP106/gotmux/gotmux"
 	"github.com/benenen/myclaw/internal/agent"
-	"github.com/gabefiori/gotmux"
 )
 
 type TMUXDriver struct {
@@ -21,7 +20,6 @@ type TMUXRuntime struct {
 	runMu sync.Mutex
 
 	state   runtimeState
-	prompt  string
 	pane    tmuxPane
 	session tmuxSession
 	readErr error
@@ -48,7 +46,7 @@ type tmuxGotmuxSession struct {
 }
 
 type tmuxGotmuxPane struct {
-	target string
+	pane *gotmux.Pane
 }
 
 func init() {
@@ -68,7 +66,6 @@ func (d *TMUXDriver) Init(ctx context.Context, spec agent.Spec) (agent.SessionRu
 
 	runtime := &TMUXRuntime{
 		state:   stateStarting,
-		prompt:  defaultPrompt,
 		waitGap: 10 * time.Millisecond,
 	}
 	if d != nil {
@@ -76,7 +73,7 @@ func (d *TMUXDriver) Init(ctx context.Context, spec agent.Spec) (agent.SessionRu
 		if runtimeFactory == nil {
 			runtimeFactory = tmuxGotmuxFactory{}
 		}
-		session, pane, err := runtimeFactory.Start(ctx, spec, nextTMUXSessionName())
+		session, pane, err := runtimeFactory.Start(ctx, spec, nextTMUXSessionName(spec.BotName))
 		if err != nil {
 			return nil, err
 		}
@@ -115,7 +112,6 @@ func (r *TMUXRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 		return agent.Response{}, fmt.Errorf("codex tmux runtime is not ready: %s", state)
 	}
 	pane := r.pane
-	prompt := r.prompt
 	r.state = stateRunning
 	r.mu.Unlock()
 
@@ -131,15 +127,12 @@ func (r *TMUXRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 	}
 	defer cancel()
 
-	runID := nextTMUXRunID()
-	beginMarker := "__MYCLAW_CODEX_RUN_BEGIN_" + runID + "__"
-	endMarker := "__MYCLAW_CODEX_RUN_END_" + runID + "__"
-	if err := pane.SendKeys(beginMarker, "C-m", promptText, "C-m", endMarker, "C-m"); err != nil {
+	if err := pane.SendKeys(promptText, "C-m"); err != nil {
 		r.markBroken(fmt.Errorf("codex tmux send failed: %w", err))
 		return agent.Response{}, r.currentError()
 	}
 
-	text, err := r.waitRunCompletion(runCtx, beginMarker, endMarker, prompt)
+	text, err := r.waitRunCompletion(runCtx)
 	if err != nil {
 		r.markBroken(err)
 		return agent.Response{}, err
@@ -161,11 +154,6 @@ func (r *TMUXRuntime) waitUntilReady(ctx context.Context) error {
 		r.mu.Unlock()
 		return nil
 	}
-	prompt := r.prompt
-	if prompt == "" {
-		prompt = defaultPrompt
-		r.prompt = prompt
-	}
 	pane := r.pane
 	gap := r.waitGap
 	r.mu.Unlock()
@@ -179,7 +167,8 @@ func (r *TMUXRuntime) waitUntilReady(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("codex tmux capture failed: %w", err)
 		}
-		if strings.Contains(normalizeTMUXOutput(captured), prompt) {
+		normalized := normalizeTMUXOutput(captured)
+		if normalized != "" {
 			r.mu.Lock()
 			if r.state != stateBroken {
 				r.state = stateReady
@@ -194,7 +183,7 @@ func (r *TMUXRuntime) waitUntilReady(ctx context.Context) error {
 	}
 }
 
-func (r *TMUXRuntime) waitRunCompletion(ctx context.Context, beginMarker, endMarker, prompt string) (string, error) {
+func (r *TMUXRuntime) waitRunCompletion(ctx context.Context) (string, error) {
 	r.mu.Lock()
 	pane := r.pane
 	gap := r.waitGap
@@ -208,7 +197,7 @@ func (r *TMUXRuntime) waitRunCompletion(ctx context.Context, beginMarker, endMar
 		if err != nil {
 			return "", fmt.Errorf("codex tmux capture failed: %w", err)
 		}
-		if text, err := extractTMUXRunResult(captured, beginMarker, endMarker, prompt); err == nil {
+		if text, err := extractTMUXRunResult(captured); err == nil {
 			return text, nil
 		}
 		if ctx.Err() != nil {
@@ -258,23 +247,9 @@ func (r *TMUXRuntime) currentError() error {
 	return fmt.Errorf("codex tmux runtime is broken")
 }
 
-func extractTMUXRunResult(text, beginMarker, endMarker, prompt string) (string, error) {
+func extractTMUXRunResult(text string) (string, error) {
 	normalized := normalizeTMUXOutput(text)
-	begin := strings.LastIndex(normalized, beginMarker)
-	if begin < 0 {
-		return "", fmt.Errorf("codex tmux output missing begin marker")
-	}
-	bodyStart := begin + len(beginMarker)
-	endOffset := strings.Index(normalized[bodyStart:], endMarker)
-	if endOffset < 0 {
-		return "", fmt.Errorf("codex tmux output missing end marker")
-	}
-	end := bodyStart + endOffset
-	after := normalized[end+len(endMarker):]
-	if !strings.Contains(after, prompt) {
-		return "", fmt.Errorf("codex tmux prompt not restored after end marker")
-	}
-	return cleanupTMUXRunText(normalized[bodyStart:end]), nil
+	return strings.TrimSpace(normalized), nil
 }
 
 func cleanupTMUXRunText(text string) string {
@@ -282,7 +257,7 @@ func cleanupTMUXRunText(text string) string {
 	cleaned := make([]string, 0, len(lines))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "__MYCLAW_CODEX_RUN_BEGIN_") || strings.HasPrefix(trimmed, "__MYCLAW_CODEX_RUN_END_") {
+		if trimmed == "" {
 			continue
 		}
 		cleaned = append(cleaned, strings.TrimRight(line, "\r"))
@@ -305,20 +280,46 @@ func (tmuxGotmuxFactory) Start(ctx context.Context, spec agent.Spec, sessionName
 		return nil, nil, fmt.Errorf("codex tmux driver does not support tmux startup env yet")
 	}
 
-	config := &gotmux.SessionConfig{Name: sessionName, WindowName: "codex"}
-	if strings.TrimSpace(spec.WorkDir) != "" {
-		config.Dir = spec.WorkDir
-	}
-	session, err := gotmux.NewSession(config)
+	tmux, err := gotmux.DefaultTmux()
 	if err != nil {
-		return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
+		return nil, nil, err
 	}
 
-	pane := tmuxGotmuxPane{target: sessionName + ":0.0"}
-	if err := pane.SendKeys(spec.Command, "C-m"); err != nil {
+	var session *gotmux.Session
+	if tmux.HasSession(sessionName) {
+		if existing, err := tmux.GetSessionByName(sessionName); err == nil && existing != nil {
+			session = existing
+		}
+	} else {
+		options := &gotmux.SessionOptions{Name: sessionName, ShellCommand: spec.Command}
+		if strings.TrimSpace(spec.WorkDir) != "" {
+			options.StartDirectory = spec.WorkDir
+		}
+
+		session, err = tmux.NewSession(options)
+		if err != nil {
+			return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
+		}
+	}
+
+	if session == nil {
+		return nil, nil, fmt.Errorf("failed to create or find tmux session %q", sessionName)
+	}
+
+	window, err := session.GetWindowByIndex(0)
+	if err != nil {
 		_ = session.Kill()
 		return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
 	}
+	panes, err := window.ListPanes()
+	if err != nil || len(panes) == 0 {
+		_ = session.Kill()
+		if err == nil {
+			err = fmt.Errorf("tmux session %q has no panes", sessionName)
+		}
+		return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
+	}
+	pane := tmuxGotmuxPane{pane: panes[0]}
 	return tmuxGotmuxSession{session: session}, pane, nil
 }
 
@@ -333,36 +334,37 @@ func (s tmuxGotmuxSession) Kill() error {
 }
 
 func (p tmuxGotmuxPane) SendKeys(keys ...string) error {
-	args := append([]string{"send-keys", "-t", p.target}, keys...)
-	cmd, err := gotmux.NewTmuxCmd(args...)
-	if err != nil {
-		return err
+	if p.pane == nil {
+		return fmt.Errorf("tmux pane is nil")
 	}
-	if err := cmd.Exec(); err != nil {
-		return fmt.Errorf("send tmux keys to %q: %w", p.target, err)
+	for _, key := range keys {
+		// if key == "C-m" {
+		// 	key = "Enter"
+		// }
+		if err := p.pane.SendKeys(key); err != nil {
+			return fmt.Errorf("send tmux keys: %w", err)
+		}
 	}
 	return nil
 }
 
 func (p tmuxGotmuxPane) CapturePane() (string, error) {
-	cmd, err := gotmux.NewTmuxCmd("capture-pane", "-p", "-t", p.target)
-	if err != nil {
-		return "", err
+	if p.pane == nil {
+		return "", fmt.Errorf("tmux pane is nil")
 	}
-	output, err := cmd.ExecWithOutput()
+	output, err := p.pane.Capture()
 	if err != nil {
-		return "", fmt.Errorf("capture tmux pane %q: %w", p.target, err)
+		return "", fmt.Errorf("capture tmux pane: %w", err)
 	}
 	return output, nil
 }
 
-var tmuxSessionCounter atomic.Uint64
-var tmuxRunCounter atomic.Uint64
-
-func nextTMUXSessionName() string {
-	return fmt.Sprintf("myclaw-codex-%d", tmuxSessionCounter.Add(1))
-}
-
-func nextTMUXRunID() string {
-	return fmt.Sprintf("%d", tmuxRunCounter.Add(1))
+func nextTMUXSessionName(botName string) string {
+	prefix := strings.TrimSpace(botName)
+	prefix = strings.ToLower(prefix)
+	prefix = strings.ReplaceAll(prefix, " ", "-")
+	if prefix == "" {
+		prefix = "codex"
+	}
+	return fmt.Sprintf("myclaw-codex-%s", prefix)
 }

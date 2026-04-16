@@ -13,6 +13,7 @@ import (
 func TestBotCLIResolverResolveReturnsConfigForConfiguredAvailableCapability(t *testing.T) {
 	bots := newBotRepoStub(domain.Bot{
 		ID:                "bot_1",
+		Name:              "helper-bot",
 		AgentCapabilityID: "cap_codex",
 		AgentMode:         "codex-exec",
 	})
@@ -42,6 +43,12 @@ func TestBotCLIResolverResolveReturnsConfigForConfiguredAvailableCapability(t *t
 	}
 	if spec.Timeout != 45*time.Second {
 		t.Fatalf("unexpected timeout: %s", spec.Timeout)
+	}
+	if spec.BotID != "bot_1" {
+		t.Fatalf("unexpected bot id: %q", spec.BotID)
+	}
+	if spec.BotName != "helper-bot" {
+		t.Fatalf("unexpected bot name: %q", spec.BotName)
 	}
 
 	spec.Args[0] = "mutated"

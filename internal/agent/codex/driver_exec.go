@@ -15,7 +15,10 @@ import (
 	"github.com/benenen/myclaw/internal/agent"
 )
 
-const execDriverName = "codex-exec"
+const (
+	execDriverName   = "codex-exec"
+	runtimeTypeCodex = "codex"
+)
 
 func init() {
 	agent.MustRegisterDriver(execDriverName, func() agent.Driver {
@@ -65,6 +68,8 @@ func (r *ExecRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 		return agent.Response{}, fmt.Errorf("codex exec request prompt is required")
 	}
 
+	println(prompt)
+
 	runCtx := ctx
 	cancel := func() {}
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline && r.spec.Timeout > 0 {
@@ -113,17 +118,17 @@ func (r *ExecRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 		if message == "" {
 			message = err.Error()
 		}
-		return agent.Response{Text: message, RuntimeType: "codex", ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, fmt.Errorf("codex exec failed: %s", message)
+		return agent.Response{Text: message, RuntimeType: runtimeTypeCodex, ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, fmt.Errorf("codex exec failed: %s", message)
 	}
 
 	text, err := lastCompletedItemText(rawOutput)
 	if err != nil {
-		return agent.Response{RuntimeType: "codex", ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, err
+		return agent.Response{RuntimeType: runtimeTypeCodex, ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, err
 	}
 
 	return agent.Response{
 		Text:        text,
-		RuntimeType: "codex",
+		RuntimeType: runtimeTypeCodex,
 		ExitCode:    exitCode,
 		Duration:    duration,
 		RawOutput:   rawOutput,
