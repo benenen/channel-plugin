@@ -34,8 +34,14 @@ func (r *ExecRuntime) Close() error {
 }
 
 type execStreamEvent struct {
-	Type string          `json:"type"`
-	Item *execStreamItem `json:"item,omitempty"`
+	Type    string           `json:"type"`
+	Item    *execStreamItem  `json:"item,omitempty"`
+	Message string           `json:"message,omitempty"`
+	Error   *execStreamError `json:"error,omitempty"`
+}
+
+type execStreamError struct {
+	Message string `json:"message,omitempty"`
 }
 
 type execStreamItem struct {
@@ -103,27 +109,50 @@ func (r *ExecRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 			}
 			return agent.Response{}, runCtx.Err()
 		}
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = strings.TrimSpace(rawOutput)
-		}
+		message := extractExecFailureMessage(rawOutput, strings.TrimSpace(stderr.String()))
 		if message == "" {
 			message = err.Error()
 		}
-		return agent.Response{ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, fmt.Errorf("codex exec failed: %s", message)
+		return agent.Response{Text: message, RuntimeType: "codex", ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, fmt.Errorf("codex exec failed: %s", message)
 	}
 
 	text, err := lastCompletedItemText(rawOutput)
 	if err != nil {
-		return agent.Response{ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, err
+		return agent.Response{RuntimeType: "codex", ExitCode: exitCode, Duration: duration, RawOutput: rawOutput}, err
 	}
 
 	return agent.Response{
-		Text:      text,
-		ExitCode:  exitCode,
-		Duration:  duration,
-		RawOutput: rawOutput,
+		Text:        text,
+		RuntimeType: "codex",
+		ExitCode:    exitCode,
+		Duration:    duration,
+		RawOutput:   rawOutput,
 	}, nil
+}
+
+func extractExecFailureMessage(raw, stderr string) string {
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event execStreamEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			continue
+		}
+		if event.Type == "turn.failed" && event.Error != nil {
+			if message := strings.TrimSpace(event.Error.Message); message != "" {
+				return message
+			}
+		}
+	}
+	if message := strings.TrimSpace(stderr); message != "" {
+		return message
+	}
+	return strings.TrimSpace(raw)
 }
 
 func lastCompletedItemText(raw string) (string, error) {

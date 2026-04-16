@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -270,6 +271,7 @@ func (o *BotMessageOrchestrator) processMessage(botID string, msg InboundMessage
 	spec, err := o.resolver.Resolve(resolveCtx, botID)
 	cancelResolve()
 	if err != nil {
+		log.Printf("resolver failed: bot_id=%s message_id=%s error=%v", msg.BotID, msg.MessageID, err)
 		o.replyWithTimeout(msg.Ctx, msg, agent.Response{Text: failedReply})
 		o.finishMessageEventually(msg, false)
 		return
@@ -309,9 +311,12 @@ func (o *BotMessageOrchestrator) processMessage(botID string, msg InboundMessage
 	}
 
 	if result.err != nil {
+		log.Printf("agent send failed: bot_id=%s message_id=%s error=%v", msg.BotID, msg.MessageID, result.err)
 		replyText := failedReply
 		if errors.Is(result.err, context.DeadlineExceeded) || errors.Is(result.err, context.Canceled) {
 			replyText = timeoutReply
+		} else if result.resp.RuntimeType != "" && strings.TrimSpace(result.resp.Text) != "" {
+			replyText = result.resp.RuntimeType + ": " + strings.TrimSpace(result.resp.Text)
 		}
 		o.replyWithTimeout(ctx, msg, agent.Response{Text: replyText})
 		o.finishMessageEventually(msg, false)

@@ -32,8 +32,9 @@ type Request struct {
 }
 
 type Response struct {
-	Text      string
-	ExitCode  int
-	Duration  time.Duration
-	RawOutput string
+	Text        string
+	RuntimeType string
+	ExitCode    int
+	Duration    time.Duration
+	RawOutput   string
 }

@@ -53,6 +53,27 @@ func TestLastCompletedItemTextReturnsErrorWhenMissing(t *testing.T) {
 	}
 }
 
+func TestExtractExecFailureMessagePrefersTurnFailedError(t *testing.T) {
+	raw := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"019d959a-4e4f-7110-afb7-63c057c41be1"}`,
+		`{"type":"turn.started"}`,
+		`{"type":"error","message":"Reconnecting... 1/5 (unexpected status 503 Service Unavailable)"}`,
+		`{"type":"turn.failed","error":{"message":"unexpected status 503 Service Unavailable: Service temporarily unavailable"}}`,
+	}, "\n")
+
+	got := extractExecFailureMessage(raw, "stderr fallback")
+	if got != "unexpected status 503 Service Unavailable: Service temporarily unavailable" {
+		t.Fatalf("extractExecFailureMessage() = %q", got)
+	}
+}
+
+func TestExtractExecFailureMessageFallsBackToStderr(t *testing.T) {
+	got := extractExecFailureMessage("", "stderr fallback")
+	if got != "stderr fallback" {
+		t.Fatalf("extractExecFailureMessage() = %q", got)
+	}
+}
+
 func TestExecRuntimeRunReturnsLastCompletedItemText(t *testing.T) {
 	runtime := &ExecRuntime{spec: agent.Spec{
 		Type:    execDriverName,
@@ -69,8 +90,32 @@ func TestExecRuntimeRunReturnsLastCompletedItemText(t *testing.T) {
 	if resp.Text != "你好，有什么要我处理的？" {
 		t.Fatalf("Run() text = %q", resp.Text)
 	}
+	if resp.RuntimeType != "codex" {
+		t.Fatalf("Run() runtime type = %q", resp.RuntimeType)
+	}
 	if !strings.Contains(resp.RawOutput, `"type":"item.completed"`) {
 		t.Fatalf("Run() raw output = %q", resp.RawOutput)
+	}
+}
+
+func TestExecRuntimeRunReturnsCodexErrorInResponseText(t *testing.T) {
+	runtime := &ExecRuntime{spec: agent.Spec{
+		Type:    execDriverName,
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestHelperProcessCodexExecDriver", "--", "exec-turn-failed"},
+		Env:     map[string]string{"GO_WANT_HELPER_PROCESS": "1"},
+		Timeout: time.Second,
+	}}
+
+	resp, err := runtime.Run(context.Background(), agent.Request{Prompt: "你好"})
+	if err == nil {
+		t.Fatal("Run() error = nil")
+	}
+	if resp.RuntimeType != "codex" {
+		t.Fatalf("Run() runtime type = %q", resp.RuntimeType)
+	}
+	if resp.Text != "unexpected status 503 Service Unavailable: Service temporarily unavailable" {
+		t.Fatalf("Run() text = %q", resp.Text)
 	}
 }
 
@@ -80,12 +125,28 @@ func TestHelperProcessCodexExecDriver(t *testing.T) {
 	}
 	args := os.Args
 	n := len(args)
-	if n < 8 || args[n-7] != "exec-success" {
+	if n < 8 {
 		os.Exit(2)
 	}
+	mode := args[n-7]
 	if args[n-6] != "exec" || args[n-5] != "--json" || args[n-4] != "--skip-git-repo-check" || args[n-3] != "resume" || args[n-2] != "--last" || args[n-1] != "你好" {
 		fmt.Fprintf(os.Stderr, "unexpected args: %#v", args)
 		os.Exit(3)
+	}
+	if mode == "exec-turn-failed" {
+		lines := []string{
+			`{"type":"thread.started","thread_id":"019d959a-4e4f-7110-afb7-63c057c41be1"}`,
+			`{"type":"turn.started"}`,
+			`{"type":"error","message":"Reconnecting... 1/5 (unexpected status 503 Service Unavailable)"}`,
+			`{"type":"turn.failed","error":{"message":"unexpected status 503 Service Unavailable: Service temporarily unavailable"}}`,
+		}
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		os.Exit(1)
+	}
+	if mode != "exec-success" {
+		os.Exit(2)
 	}
 
 	lines := []string{

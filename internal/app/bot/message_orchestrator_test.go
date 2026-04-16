@@ -585,6 +585,14 @@ func TestOrchestratorProcessesRetriedMessageIDAfterBusyReject(t *testing.T) {
 }
 
 func TestOrchestratorRepliesTimeoutWhenAgentTimesOut(t *testing.T) {
+	var logs bytes.Buffer
+	originalWriter := log.Writer()
+	originalFlags := log.Flags()
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer log.SetOutput(originalWriter)
+	defer log.SetFlags(originalFlags)
+
 	done := make(chan struct{})
 	gateway := &recordingReplyGateway{done: done}
 	mgr := &fakeExecutor{send: func(_ context.Context, _ string, _ agent.Spec, _ agent.Request) (agent.Response, error) {
@@ -604,6 +612,13 @@ func TestOrchestratorRepliesTimeoutWhenAgentTimesOut(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gateway.targets(), []string{"u"}) {
 		t.Fatalf("targets = %#v", gateway.targets())
+	}
+	got := logs.String()
+	if !strings.Contains(got, "agent send failed") {
+		t.Fatalf("logs = %q, want agent send failure log", got)
+	}
+	if !strings.Contains(got, "bot_id=bot-1") || !strings.Contains(got, "message_id=m1") || !strings.Contains(got, "error=context deadline exceeded") {
+		t.Fatalf("logs = %q, want bot_id/message_id/error", got)
 	}
 }
 
@@ -815,10 +830,18 @@ func TestOrchestratorBusyRejectDoesNotMarkMessageSeen(t *testing.T) {
 }
 
 func TestOrchestratorRepliesFailureWhenAgentFails(t *testing.T) {
+	var logs bytes.Buffer
+	originalWriter := log.Writer()
+	originalFlags := log.Flags()
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer log.SetOutput(originalWriter)
+	defer log.SetFlags(originalFlags)
+
 	done := make(chan struct{})
 	gateway := &recordingReplyGateway{done: done}
 	mgr := &fakeExecutor{send: func(_ context.Context, _ string, _ agent.Spec, _ agent.Request) (agent.Response, error) {
-		return agent.Response{}, errors.New("boom")
+		return agent.Response{Text: "unexpected status 503", RuntimeType: "codex"}, errors.New("codex exec failed: unexpected status 503")
 	}}
 	orchestrator := NewBotMessageOrchestrator(mgr, gateway, fakeResolver{})
 
@@ -829,7 +852,37 @@ func TestOrchestratorRepliesFailureWhenAgentFails(t *testing.T) {
 		t.Fatal("timed out waiting for failure reply")
 	}
 
-	if !reflect.DeepEqual(gateway.texts(), []string{failedReply}) {
+	if !reflect.DeepEqual(gateway.texts(), []string{"codex: unexpected status 503"}) {
+		t.Fatalf("replies = %#v", gateway.texts())
+	}
+	if !reflect.DeepEqual(gateway.targets(), []string{"u"}) {
+		t.Fatalf("targets = %#v", gateway.targets())
+	}
+	got := logs.String()
+	if !strings.Contains(got, "agent send failed") {
+		t.Fatalf("logs = %q, want agent send failure log", got)
+	}
+	if !strings.Contains(got, "bot_id=bot-1") || !strings.Contains(got, "message_id=m1") || !strings.Contains(got, "error=codex exec failed: unexpected status 503") {
+		t.Fatalf("logs = %q, want bot_id/message_id/error", got)
+	}
+}
+
+func TestOrchestratorRepliesTypedAgentErrorWhenResponseCarriesRuntimeType(t *testing.T) {
+	done := make(chan struct{})
+	gateway := &recordingReplyGateway{done: done}
+	mgr := &fakeExecutor{send: func(_ context.Context, _ string, _ agent.Spec, _ agent.Request) (agent.Response, error) {
+		return agent.Response{Text: "service unavailable", RuntimeType: "codex"}, errors.New("boom")
+	}}
+	orchestrator := NewBotMessageOrchestrator(mgr, gateway, fakeResolver{})
+
+	orchestrator.HandleMessage(context.Background(), InboundMessage{BotID: "bot-1", MessageID: "m-typed", From: "u", Text: "one"})
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for typed failure reply")
+	}
+
+	if !reflect.DeepEqual(gateway.texts(), []string{"codex: service unavailable"}) {
 		t.Fatalf("replies = %#v", gateway.texts())
 	}
 	if !reflect.DeepEqual(gateway.targets(), []string{"u"}) {
