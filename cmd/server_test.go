@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"bytes"
@@ -10,10 +10,10 @@ import (
 	"github.com/benenen/myclaw/internal/config"
 )
 
-func TestRunDefaultsToServerCommand(t *testing.T) {
+func TestExecuteDefaultsToServerCommand(t *testing.T) {
 	called := 0
 
-	exitCode := runWithServer(nil, io.Discard, io.Discard, func(io.Writer) int {
+	exitCode := executeWithServer(nil, io.Discard, io.Discard, func(io.Writer) int {
 		called++
 		return 0
 	})
@@ -26,10 +26,10 @@ func TestRunDefaultsToServerCommand(t *testing.T) {
 	}
 }
 
-func TestRunExplicitServerCommand(t *testing.T) {
+func TestExecuteExplicitServerCommand(t *testing.T) {
 	called := 0
 
-	exitCode := runWithServer([]string{"server"}, io.Discard, io.Discard, func(io.Writer) int {
+	exitCode := executeWithServer([]string{"server"}, io.Discard, io.Discard, func(io.Writer) int {
 		called++
 		return 0
 	})
@@ -42,11 +42,11 @@ func TestRunExplicitServerCommand(t *testing.T) {
 	}
 }
 
-func TestRunHelpAliasesWriteUsage(t *testing.T) {
+func TestExecuteHelpAliasesWriteUsage(t *testing.T) {
 	for _, args := range [][]string{{"help"}, {"-h"}, {"--help"}} {
 		var stdout bytes.Buffer
 
-		exitCode := runWithServer(args, &stdout, io.Discard, func(io.Writer) int {
+		exitCode := executeWithServer(args, &stdout, io.Discard, func(io.Writer) int {
 			t.Fatal("server should not run for help")
 			return 1
 		})
@@ -60,10 +60,10 @@ func TestRunHelpAliasesWriteUsage(t *testing.T) {
 	}
 }
 
-func TestRunUnknownCommandReturnsError(t *testing.T) {
+func TestExecuteUnknownCommandReturnsError(t *testing.T) {
 	var stderr bytes.Buffer
 
-	exitCode := runWithServer([]string{"nope"}, io.Discard, &stderr, func(io.Writer) int {
+	exitCode := executeWithServer([]string{"nope"}, io.Discard, &stderr, func(io.Writer) int {
 		t.Fatal("server should not run for unknown command")
 		return 1
 	})
@@ -76,6 +76,38 @@ func TestRunUnknownCommandReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "Usage:") {
 		t.Fatalf("stderr = %q, want usage text", stderr.String())
+	}
+}
+
+func TestExecuteNotifyPrintsMessage(t *testing.T) {
+	var stdout bytes.Buffer
+
+	exitCode := executeWithServer([]string{"notify", "hello"}, &stdout, io.Discard, func(io.Writer) int {
+		t.Fatal("server should not run for notify")
+		return 1
+	})
+
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if stdout.String() != "hello\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "hello\n")
+	}
+}
+
+func TestExecuteNotifyRequiresMessage(t *testing.T) {
+	var stderr bytes.Buffer
+
+	exitCode := executeWithServer([]string{"notify"}, io.Discard, &stderr, func(io.Writer) int {
+		t.Fatal("server should not run for notify")
+		return 1
+	})
+
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "accepts 1 arg(s), received 0") {
+		t.Fatalf("stderr = %q, want arg validation error", stderr.String())
 	}
 }
 
