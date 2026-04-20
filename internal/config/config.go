@@ -21,10 +21,15 @@ type Config struct {
 	ChannelMasterKey []byte
 }
 
-func Load() (Config, error) {
+type DataPaths struct {
+	DataDir    string
+	SQLitePath string
+}
+
+func LoadDataPaths() (DataPaths, error) {
 	dataDir, err := expandPath(getEnvOrDefault("CHANNEL_DATA_DIR", "~/.myclaw"))
 	if err != nil {
-		return Config{}, err
+		return DataPaths{}, err
 	}
 
 	sqlitePathEnv := os.Getenv("CHANNEL_SQLITE_PATH")
@@ -32,14 +37,26 @@ func Load() (Config, error) {
 	if sqlitePathEnv != "" {
 		sqlitePath, err = expandPath(sqlitePathEnv)
 		if err != nil {
-			return Config{}, err
+			return DataPaths{}, err
 		}
 	}
 
-	cfg := Config{
+	return DataPaths{
 		DataDir:    dataDir,
-		HTTPAddr:   getEnvOrDefault("CHANNEL_HTTP_ADDR", ":8080"),
 		SQLitePath: sqlitePath,
+	}, nil
+}
+
+func Load() (Config, error) {
+	paths, err := LoadDataPaths()
+	if err != nil {
+		return Config{}, err
+	}
+
+	cfg := Config{
+		DataDir:    paths.DataDir,
+		HTTPAddr:   getEnvOrDefault("CHANNEL_HTTP_ADDR", ":8080"),
+		SQLitePath: paths.SQLitePath,
 		LogLevel:   getEnvOrDefault("LOG_LEVEL", "info"),
 	}
 

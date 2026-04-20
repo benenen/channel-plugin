@@ -13,15 +13,16 @@ const (
 )
 
 type Spec struct {
-	BotID     string
-	BotName   string
-	Type      string
-	Command   string
-	Args      []string
-	WorkDir   string
-	Env       map[string]string
-	Timeout   time.Duration
-	QueueSize int
+	BotID      string
+	BotName    string
+	Type       string
+	Command    string
+	Args       []string
+	WorkDir    string
+	SQLitePath string
+	Env        map[string]string
+	Timeout    time.Duration
+	QueueSize  int
 }
 
 type Request struct {

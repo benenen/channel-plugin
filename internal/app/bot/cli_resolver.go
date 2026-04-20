@@ -21,6 +21,7 @@ var (
 type BotCLIResolverConfig struct {
 	Timeout       time.Duration
 	WorkspaceRoot string
+	SQLitePath    string
 }
 
 type BotCLIResolver struct {
@@ -28,6 +29,7 @@ type BotCLIResolver struct {
 	capabilities  domain.AgentCapabilityRepository
 	timeout       time.Duration
 	workspaceRoot string
+	sqlitePath    string
 }
 
 func NewBotCLIResolver(bots domain.BotRepository, capabilities domain.AgentCapabilityRepository, cfg BotCLIResolverConfig) *BotCLIResolver {
@@ -36,6 +38,7 @@ func NewBotCLIResolver(bots domain.BotRepository, capabilities domain.AgentCapab
 		capabilities:  capabilities,
 		timeout:       cfg.Timeout,
 		workspaceRoot: cfg.WorkspaceRoot,
+		sqlitePath:    cfg.SQLitePath,
 	}
 }
 
@@ -64,12 +67,13 @@ func (r *BotCLIResolver) Resolve(ctx context.Context, botID string) (agent.Spec,
 		return agent.Spec{}, ErrBotCLIConfigMissing
 	}
 	spec := agent.Spec{
-		BotID:   botID,
-		BotName: bot.Name,
-		Type:    bot.AgentMode,
-		Command: capability.Command,
-		Args:    append([]string(nil), capability.Args...),
-		Timeout: r.timeoutForMode(bot.AgentMode),
+		BotID:      botID,
+		BotName:    bot.Name,
+		Type:       bot.AgentMode,
+		Command:    capability.Command,
+		Args:       append([]string(nil), capability.Args...),
+		Timeout:    r.timeoutForMode(bot.AgentMode),
+		SQLitePath: r.sqlitePath,
 	}
 	if r.workspaceRoot != "" {
 		spec.WorkDir = filepath.Join(r.workspaceRoot, botID, "workspace")

@@ -74,6 +74,7 @@ func New(cfg config.Config) (*App, error) {
 	resolver := bot.NewBotCLIResolver(botRepo, capabilityRepo, bot.BotCLIResolverConfig{
 		Timeout:       botCLITimeout,
 		WorkspaceRoot: cfg.BotWorkspaceRoot(),
+		SQLitePath:    cfg.SQLitePath,
 	})
 	orchestrator := bot.NewBotMessageOrchestrator(executor, replyGateway, resolver)
 	messageSimulator := bot.NewMessageSimulator(botRepo, accountRepo, cipher, orchestrator)

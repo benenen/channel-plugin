@@ -101,6 +101,35 @@ func TestBotCLIResolverResolveAssignsAndCreatesBotWorkspace(t *testing.T) {
 	}
 }
 
+func TestBotCLIResolverResolveAssignsSQLitePath(t *testing.T) {
+	bots := newBotRepoStub(domain.Bot{
+		ID:                "bot_1",
+		Name:              "helper-bot",
+		AgentCapabilityID: "cap_codex",
+		AgentMode:         "codex-tmux",
+	})
+	capabilities := &agentCapabilityRepoStub{byID: map[string]domain.AgentCapability{
+		"cap_codex": {
+			ID:             "cap_codex",
+			Command:        "/usr/local/bin/codex",
+			SupportedModes: []string{"codex-tmux"},
+			Available:      true,
+		},
+	}}
+	resolver := NewBotCLIResolver(bots, capabilities, BotCLIResolverConfig{
+		Timeout:    45 * time.Second,
+		SQLitePath: "/tmp/myclaw/myclaw.db",
+	})
+
+	spec, err := resolver.Resolve(context.Background(), "bot_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.SQLitePath != "/tmp/myclaw/myclaw.db" {
+		t.Fatalf("SQLitePath = %q", spec.SQLitePath)
+	}
+}
+
 func TestBotCLIResolverResolveUsesDedicatedCodexExecTimeout(t *testing.T) {
 	bots := newBotRepoStub(domain.Bot{
 		ID:                "bot_1",
