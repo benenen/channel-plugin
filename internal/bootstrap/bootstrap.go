@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"context"
 	stdhttp "net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/benenen/myclaw/internal/agent"
@@ -33,6 +35,17 @@ type App struct {
 func New(cfg config.Config) (*App, error) {
 	logger := logging.New(cfg.LogLevel)
 
+	if cfg.DataDir != "" {
+		if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.SQLitePath != "" && cfg.SQLitePath != ":memory:" {
+		if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0o755); err != nil {
+			return nil, err
+		}
+	}
+
 	db, err := store.Open(cfg.SQLitePath)
 	if err != nil {
 		return nil, err
@@ -59,7 +72,8 @@ func New(cfg config.Config) (*App, error) {
 	executor := agent.NewManager()
 	replyGateway := wechat.NewReplyGateway(wechatClient)
 	resolver := bot.NewBotCLIResolver(botRepo, capabilityRepo, bot.BotCLIResolverConfig{
-		Timeout: botCLITimeout,
+		Timeout:       botCLITimeout,
+		WorkspaceRoot: cfg.BotWorkspaceRoot(),
 	})
 	orchestrator := bot.NewBotMessageOrchestrator(executor, replyGateway, resolver)
 	messageSimulator := bot.NewMessageSimulator(botRepo, accountRepo, cipher, orchestrator)

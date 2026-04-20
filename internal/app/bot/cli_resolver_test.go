@@ -3,6 +3,8 @@ package bot
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -50,10 +52,52 @@ func TestBotCLIResolverResolveReturnsConfigForConfiguredAvailableCapability(t *t
 	if spec.BotName != "helper-bot" {
 		t.Fatalf("unexpected bot name: %q", spec.BotName)
 	}
+	if spec.WorkDir != "" {
+		t.Fatalf("unexpected workdir: %q", spec.WorkDir)
+	}
 
 	spec.Args[0] = "mutated"
 	if capabilities.byID["cap_codex"].Args[0] != "reply" {
 		t.Fatal("expected resolver to copy args")
+	}
+}
+
+func TestBotCLIResolverResolveAssignsAndCreatesBotWorkspace(t *testing.T) {
+	workspaceRoot := filepath.Join(t.TempDir(), "bots")
+	bots := newBotRepoStub(domain.Bot{
+		ID:                "bot_1",
+		Name:              "helper-bot",
+		AgentCapabilityID: "cap_codex",
+		AgentMode:         "codex-exec",
+	})
+	capabilities := &agentCapabilityRepoStub{byID: map[string]domain.AgentCapability{
+		"cap_codex": {
+			ID:             "cap_codex",
+			Command:        "/usr/local/bin/codex",
+			SupportedModes: []string{"codex-exec"},
+			Available:      true,
+		},
+	}}
+	resolver := NewBotCLIResolver(bots, capabilities, BotCLIResolverConfig{
+		Timeout:       45 * time.Second,
+		WorkspaceRoot: workspaceRoot,
+	})
+
+	spec, err := resolver.Resolve(context.Background(), "bot_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(workspaceRoot, "bot_1", "workspace")
+	if spec.WorkDir != want {
+		t.Fatalf("WorkDir = %q, want %q", spec.WorkDir, want)
+	}
+	info, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", want, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("%q is not a directory", want)
 	}
 }
 

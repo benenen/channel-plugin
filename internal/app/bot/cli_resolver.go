@@ -3,6 +3,8 @@ package bot
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -17,20 +19,23 @@ var (
 )
 
 type BotCLIResolverConfig struct {
-	Timeout time.Duration
+	Timeout       time.Duration
+	WorkspaceRoot string
 }
 
 type BotCLIResolver struct {
-	bots         domain.BotRepository
-	capabilities domain.AgentCapabilityRepository
-	timeout      time.Duration
+	bots          domain.BotRepository
+	capabilities  domain.AgentCapabilityRepository
+	timeout       time.Duration
+	workspaceRoot string
 }
 
 func NewBotCLIResolver(bots domain.BotRepository, capabilities domain.AgentCapabilityRepository, cfg BotCLIResolverConfig) *BotCLIResolver {
 	return &BotCLIResolver{
-		bots:         bots,
-		capabilities: capabilities,
-		timeout:      cfg.Timeout,
+		bots:          bots,
+		capabilities:  capabilities,
+		timeout:       cfg.Timeout,
+		workspaceRoot: cfg.WorkspaceRoot,
 	}
 }
 
@@ -58,14 +63,21 @@ func (r *BotCLIResolver) Resolve(ctx context.Context, botID string) (agent.Spec,
 	if capability.Command == "" {
 		return agent.Spec{}, ErrBotCLIConfigMissing
 	}
-	return agent.Spec{
+	spec := agent.Spec{
 		BotID:   botID,
 		BotName: bot.Name,
 		Type:    bot.AgentMode,
 		Command: capability.Command,
 		Args:    append([]string(nil), capability.Args...),
 		Timeout: r.timeoutForMode(bot.AgentMode),
-	}, nil
+	}
+	if r.workspaceRoot != "" {
+		spec.WorkDir = filepath.Join(r.workspaceRoot, botID, "workspace")
+		if err := os.MkdirAll(spec.WorkDir, 0o755); err != nil {
+			return agent.Spec{}, err
+		}
+	}
+	return spec, nil
 }
 
 func (r *BotCLIResolver) timeoutForMode(mode string) time.Duration {

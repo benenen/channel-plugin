@@ -12,8 +12,9 @@ AI CLI channel plugin — centralized channel management service.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `CHANNEL_MASTER_KEY` | Yes | — | Base64-encoded 32-byte key for AES-256-GCM credential encryption |
+| `CHANNEL_DATA_DIR` | No | `~/.myclaw` | Root directory for default local data such as config files, SQLite, and bot workspaces |
 | `CHANNEL_HTTP_ADDR` | No | `:8080` | HTTP listen address |
-| `CHANNEL_SQLITE_PATH` | No | `channel.db` | SQLite database file path |
+| `CHANNEL_SQLITE_PATH` | No | `~/.myclaw/myclaw.db` | SQLite database file path |
 | `WECHAT_REFERENCE_BASE_URL` | No | `http://localhost:9090` | WeChat reference adapter base URL |
 | `WECHAT_AUTH_TOKEN` | No | — | Optional auth token for WeChat adapter |
 

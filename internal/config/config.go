@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 const requiredMasterKeyBytes = 32
@@ -12,6 +14,7 @@ const requiredMasterKeyBytes = 32
 var ErrMissingMasterKey = errors.New("CHANNEL_MASTER_KEY is required")
 
 type Config struct {
+	DataDir          string
 	HTTPAddr         string
 	SQLitePath       string
 	LogLevel         string
@@ -19,9 +22,24 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	dataDir, err := expandPath(getEnvOrDefault("CHANNEL_DATA_DIR", "~/.myclaw"))
+	if err != nil {
+		return Config{}, err
+	}
+
+	sqlitePathEnv := os.Getenv("CHANNEL_SQLITE_PATH")
+	sqlitePath := filepath.Join(dataDir, "myclaw.db")
+	if sqlitePathEnv != "" {
+		sqlitePath, err = expandPath(sqlitePathEnv)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+
 	cfg := Config{
+		DataDir:    dataDir,
 		HTTPAddr:   getEnvOrDefault("CHANNEL_HTTP_ADDR", ":8080"),
-		SQLitePath: getEnvOrDefault("CHANNEL_SQLITE_PATH", "channel.db"),
+		SQLitePath: sqlitePath,
 		LogLevel:   getEnvOrDefault("LOG_LEVEL", "info"),
 	}
 
@@ -42,10 +60,39 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+func (c Config) BotWorkspaceRoot() string {
+	return filepath.Join(c.DataDir, "bots")
+}
+
+func (c Config) BotWorkspacePath(botID string) string {
+	return filepath.Join(c.BotWorkspaceRoot(), botID, "workspace")
+}
+
 func getEnvOrDefault(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {
 		return fallback
 	}
 	return value
+}
+
+func expandPath(path string) (string, error) {
+	switch {
+	case path == "":
+		return "", nil
+	case path == "~":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		return home, nil
+	case strings.HasPrefix(path, "~/"):
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		return filepath.Join(home, strings.TrimPrefix(path, "~/")), nil
+	default:
+		return path, nil
+	}
 }
