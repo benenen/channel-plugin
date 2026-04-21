@@ -310,3 +310,55 @@ func (r *TMUXRuntime) Close() error {
 	}
 	return nil
 }
+
+// cleanupTMUXRunText removes empty lines and trailing \r from text.
+func cleanupTMUXRunText(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	cleaned := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		cleaned = append(cleaned, strings.TrimRight(line, "\r"))
+	}
+	return strings.TrimSpace(strings.Join(cleaned, "\n"))
+}
+
+// normalizeTMUXOutput replaces \r\n with \n.
+func normalizeTMUXOutput(text string) string {
+	return strings.ReplaceAll(text, "\r\n", "\n")
+}
+
+// writeTMUXCurrentRunID writes the run ID to the .myclaw-run-id file.
+func writeTMUXCurrentRunID(workDir, runID string) error {
+	if strings.TrimSpace(workDir) == "" {
+		return fmt.Errorf("claude tmux workdir is required")
+	}
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		return fmt.Errorf("claude tmux prepare workdir: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, currentTMUXRunIDFileName), []byte(runID+"\n"), 0o644); err != nil {
+		return fmt.Errorf("claude tmux write current run id: %w", err)
+	}
+	return nil
+}
+
+// nextTMUXSessionName generates a session name like "myclaw-claude-<botname>".
+func nextTMUXSessionName(botName string) string {
+	prefix := strings.TrimSpace(botName)
+	prefix = strings.ToLower(prefix)
+	prefix = strings.ReplaceAll(prefix, " ", "-")
+	if prefix == "" {
+		prefix = "claude"
+	}
+	return fmt.Sprintf("myclaw-claude-%s", prefix)
+}
+
+// shellQuote shell-escapes text with single quotes.
+func shellQuote(text string) string {
+	if text == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
+}
