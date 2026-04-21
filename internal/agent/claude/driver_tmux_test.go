@@ -266,3 +266,246 @@ func TestTMUXRuntime_Run_BrokenState(t *testing.T) {
 		t.Fatal("Run should fail with broken state")
 	}
 }
+
+// TestTMUXRuntime_Close tests Close method kills session and sets state.
+func TestTMUXRuntime_Close(t *testing.T) {
+	t.Run("close with session", func(t *testing.T) {
+		killed := false
+		session := &mockTMUXSession{
+			killFunc: func() error {
+				killed = true
+				return nil
+			},
+		}
+		pane := &mockTMUXPane{}
+
+		runtime := &TMUXRuntime{
+			state:   stateReady,
+			session: session,
+			pane:    pane,
+		}
+
+		err := runtime.Close()
+		if err != nil {
+			t.Fatalf("Close() failed: %v", err)
+		}
+		if !killed {
+			t.Error("Close() did not kill session")
+		}
+		if runtime.state != stateBroken {
+			t.Errorf("expected state %q, got %q", stateBroken, runtime.state)
+		}
+		if runtime.session != nil {
+			t.Error("Close() did not clear session")
+		}
+		if runtime.pane != nil {
+			t.Error("Close() did not clear pane")
+		}
+		if runtime.readErr == nil || !strings.Contains(runtime.readErr.Error(), "runtime closed") {
+			t.Errorf("expected readErr to contain 'runtime closed', got %v", runtime.readErr)
+		}
+	})
+
+	t.Run("close with nil runtime", func(t *testing.T) {
+		var runtime *TMUXRuntime
+		err := runtime.Close()
+		if err != nil {
+			t.Fatalf("Close() on nil runtime should not error: %v", err)
+		}
+	})
+
+	t.Run("close with nil session", func(t *testing.T) {
+		runtime := &TMUXRuntime{
+			state:   stateReady,
+			session: nil,
+			pane:    &mockTMUXPane{},
+		}
+
+		err := runtime.Close()
+		if err != nil {
+			t.Fatalf("Close() with nil session failed: %v", err)
+		}
+		if runtime.state != stateBroken {
+			t.Errorf("expected state %q, got %q", stateBroken, runtime.state)
+		}
+	})
+
+	t.Run("close with kill error", func(t *testing.T) {
+		killErr := errors.New("kill failed")
+		session := &mockTMUXSession{
+			killFunc: func() error {
+				return killErr
+			},
+		}
+
+		runtime := &TMUXRuntime{
+			state:   stateReady,
+			session: session,
+		}
+
+		err := runtime.Close()
+		if err == nil {
+			t.Fatal("Close() should return kill error")
+		}
+		if !strings.Contains(err.Error(), "kill failed") {
+			t.Errorf("expected error to contain 'kill failed', got %v", err)
+		}
+	})
+}
+
+// TestNextTMUXSessionName tests session naming with various inputs.
+func TestNextTMUXSessionName(t *testing.T) {
+	tests := []struct {
+		name     string
+		botName  string
+		expected string
+	}{
+		{
+			name:     "simple name",
+			botName:  "mybot",
+			expected: "myclaw-claude-mybot",
+		},
+		{
+			name:     "name with spaces",
+			botName:  "my bot",
+			expected: "myclaw-claude-my-bot",
+		},
+		{
+			name:     "uppercase name",
+			botName:  "MyBot",
+			expected: "myclaw-claude-mybot",
+		},
+		{
+			name:     "empty name",
+			botName:  "",
+			expected: "myclaw-claude-claude",
+		},
+		{
+			name:     "whitespace only",
+			botName:  "   ",
+			expected: "myclaw-claude-claude",
+		},
+		{
+			name:     "multiple spaces",
+			botName:  "my  bot  name",
+			expected: "myclaw-claude-my--bot--name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := nextTMUXSessionName(tt.botName)
+			if result != tt.expected {
+				t.Errorf("nextTMUXSessionName(%q) = %q, want %q", tt.botName, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCleanupTMUXRunText tests text cleanup.
+func TestCleanupTMUXRunText(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple text",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "text with empty lines",
+			input:    "line1\n\nline2\n\nline3",
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name:     "text with carriage returns",
+			input:    "line1\r\nline2\r\nline3\r",
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name:     "text with leading/trailing whitespace",
+			input:    "  \n  line1  \n  line2  \n  ",
+			expected: "line1  \n  line2",
+		},
+		{
+			name:     "empty text",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "whitespace only",
+			input:    "   \n   \n   ",
+			expected: "",
+		},
+		{
+			name:     "mixed whitespace and content",
+			input:    "\n\nhello\n\n\nworld\n\n",
+			expected: "hello\nworld",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cleanupTMUXRunText(tt.input)
+			if result != tt.expected {
+				t.Errorf("cleanupTMUXRunText(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestShellQuote tests shell quoting.
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple text",
+			input:    "hello",
+			expected: "'hello'",
+		},
+		{
+			name:     "text with spaces",
+			input:    "hello world",
+			expected: "'hello world'",
+		},
+		{
+			name:     "text with single quote",
+			input:    "it's",
+			expected: "'it'\\''s'",
+		},
+		{
+			name:     "text with multiple single quotes",
+			input:    "it's a 'test'",
+			expected: "'it'\\''s a '\\''test'\\'''",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "''",
+		},
+		{
+			name:     "special characters",
+			input:    "hello$world",
+			expected: "'hello$world'",
+		},
+		{
+			name:     "newline",
+			input:    "hello\nworld",
+			expected: "'hello\nworld'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := shellQuote(tt.input)
+			if result != tt.expected {
+				t.Errorf("shellQuote(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
