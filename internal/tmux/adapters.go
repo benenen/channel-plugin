@@ -158,4 +158,3 @@ func ShellQuote(text string) string {
 	}
 	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
 }
-
