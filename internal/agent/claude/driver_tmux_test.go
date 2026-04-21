@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/benenen/myclaw/internal/agent"
+	"github.com/benenen/myclaw/internal/tmux"
 )
 
 // mockTMUXPane is a mock implementation of tmuxPane.
@@ -448,7 +449,7 @@ func TestCleanupTMUXRunText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := cleanupTMUXRunText(tt.input)
+			result := tmux.CleanupTMUXRunText(tt.input)
 			if result != tt.expected {
 				t.Errorf("cleanupTMUXRunText(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
@@ -502,7 +503,7 @@ func TestShellQuote(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := shellQuote(tt.input)
+			result := tmux.ShellQuote(tt.input)
 			if result != tt.expected {
 				t.Errorf("shellQuote(%q) = %q, want %q", tt.input, result, tt.expected)
 			}

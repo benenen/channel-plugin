@@ -163,7 +163,7 @@ func (r *TMUXRuntime) waitUntilReady(ctx context.Context) error {
 			return fmt.Errorf("failed to capture pane: %w", err)
 		}
 
-		normalized := normalizeTMUXOutput(output)
+		normalized := tmux.NormalizeTMUXOutput(output)
 		if normalized != "" {
 			r.mu.Lock()
 			r.state = stateReady
@@ -266,7 +266,7 @@ func (r *TMUXRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 		r.markBroken(fmt.Errorf("claude tmux capture failed: %w", err))
 		return agent.Response{}, r.currentError()
 	}
-	text := cleanupTMUXRunText(normalizeTMUXOutput(captured))
+	text := tmux.CleanupTMUXRunText(tmux.NormalizeTMUXOutput(captured))
 
 	r.mu.Lock()
 	if r.state != stateBroken {
@@ -297,25 +297,6 @@ func (r *TMUXRuntime) Close() error {
 	return nil
 }
 
-// cleanupTMUXRunText removes empty lines and trailing \r from text.
-func cleanupTMUXRunText(text string) string {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-	cleaned := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		cleaned = append(cleaned, strings.TrimRight(line, "\r"))
-	}
-	return strings.TrimSpace(strings.Join(cleaned, "\n"))
-}
-
-// normalizeTMUXOutput replaces \r\n with \n.
-func normalizeTMUXOutput(text string) string {
-	return strings.ReplaceAll(text, "\r\n", "\n")
-}
-
 // writeTMUXCurrentRunID writes the run ID to the .myclaw-run-id file.
 func writeTMUXCurrentRunID(workDir, runID string) error {
 	if strings.TrimSpace(workDir) == "" {
@@ -341,14 +322,6 @@ func nextTMUXSessionName(botName string) string {
 	return fmt.Sprintf("myclaw-claude-%s", prefix)
 }
 
-// shellQuote shell-escapes text with single quotes.
-func shellQuote(text string) string {
-	if text == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
-}
-
 // buildTMUXShellCommand builds the shell command with notify config.
 func buildTMUXShellCommand(spec agent.Spec) string {
 	command := strings.TrimSpace(spec.Command)
@@ -356,7 +329,7 @@ func buildTMUXShellCommand(spec agent.Spec) string {
 		return ""
 	}
 	notifyConfig := fmt.Sprintf(`notify=["myclaw", "notify", "claude", %s]`, strconv.Quote(spec.BotName))
-	return command + " -c " + shellQuote(notifyConfig)
+	return command + " -c " + tmux.ShellQuote(notifyConfig)
 }
 
 // buildTMUXSessionOptions creates SessionOptions with name, shell command, and start directory.
