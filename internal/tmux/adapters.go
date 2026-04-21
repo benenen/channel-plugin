@@ -1,6 +1,6 @@
 package tmux
 
-import gotmux "github.com/jubnzv/go-tmux"
+import "github.com/GianlucaP106/gotmux/gotmux"
 
 // Pane represents a tmux pane interface for sending keys and capturing output.
 type Pane interface {
