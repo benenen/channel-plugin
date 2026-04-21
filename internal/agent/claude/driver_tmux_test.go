@@ -201,10 +201,10 @@ func TestTMUXRuntime_Run_Success(t *testing.T) {
 	}
 
 	runtime := &TMUXRuntime{
-		state:    stateReady,
-		pane:     pane,
-		session:  &mockTMUXSession{},
-		waitGap:  1 * time.Millisecond,
+		state:   stateReady,
+		pane:    pane,
+		session: &mockTMUXSession{},
+		waitGap: 1 * time.Millisecond,
 		spec: agent.Spec{
 			BotName: "test-bot",
 			WorkDir: t.TempDir(),
