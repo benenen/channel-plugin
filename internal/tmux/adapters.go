@@ -108,6 +108,10 @@ func (GotmuxFactory) Start(ctx context.Context, spec agent.Spec, sessionName str
 		_ = session.Kill()
 		return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
 	}
+	if window == nil {
+		_ = session.Kill()
+		return nil, nil, fmt.Errorf("tmux session %q has no window at index 0", sessionName)
+	}
 	panes, err := window.ListPanes()
 	if err != nil || len(panes) == 0 {
 		_ = session.Kill()
