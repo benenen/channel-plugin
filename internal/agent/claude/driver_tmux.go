@@ -290,3 +290,23 @@ func (r *TMUXRuntime) Run(ctx context.Context, req agent.Request) (agent.Respons
 
 	return agent.Response{Text: text, RuntimeType: runtimeTypeClaude, ExitCode: 0, RawOutput: text}, nil
 }
+
+// Close terminates the TMUX runtime and cleans up resources.
+func (r *TMUXRuntime) Close() error {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.Lock()
+	sess := r.session
+	r.session = nil
+	r.pane = nil
+	r.state = stateBroken
+	r.readErr = errors.New("runtime closed")
+	r.mu.Unlock()
+
+	if sess != nil {
+		return sess.Kill()
+	}
+	return nil
+}
