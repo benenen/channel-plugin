@@ -1,9 +1,12 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	"github.com/GianlucaP106/gotmux/gotmux"
+	"github.com/benenen/myclaw/internal/agent"
 )
 
 // Pane represents a tmux pane interface for sending keys and capturing output.
@@ -64,5 +67,68 @@ func (p GotmuxPane) CapturePane() (string, error) {
 		return "", fmt.Errorf("capture tmux pane: %w", err)
 	}
 	return output, nil
+}
+
+// Start creates a new tmux session or reuses an existing one.
+func (GotmuxFactory) Start(ctx context.Context, spec agent.Spec, sessionName string) (Session, Pane, error) {
+	if ctx.Err() != nil {
+		return nil, nil, ctx.Err()
+	}
+	if len(spec.Args) > 0 {
+		return nil, nil, fmt.Errorf("tmux driver does not support startup args yet")
+	}
+	if len(spec.Env) > 0 {
+		return nil, nil, fmt.Errorf("tmux driver does not support startup env yet")
+	}
+
+	tmux, err := gotmux.DefaultTmux()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var session *gotmux.Session
+	if tmux.HasSession(sessionName) {
+		if existing, err := tmux.GetSessionByName(sessionName); err == nil && existing != nil {
+			session = existing
+		}
+	} else {
+		options := buildSessionOptions(spec, sessionName)
+		session, err = tmux.NewSession(options)
+		if err != nil {
+			return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
+		}
+	}
+
+	if session == nil {
+		return nil, nil, fmt.Errorf("failed to create or find tmux session %q", sessionName)
+	}
+
+	window, err := session.GetWindowByIndex(0)
+	if err != nil {
+		_ = session.Kill()
+		return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
+	}
+	panes, err := window.ListPanes()
+	if err != nil || len(panes) == 0 {
+		_ = session.Kill()
+		if err == nil {
+			err = fmt.Errorf("tmux session %q has no panes", sessionName)
+		}
+		return nil, nil, fmt.Errorf("start tmux session %q: %w", sessionName, err)
+	}
+	pane := GotmuxPane{pane: panes[0]}
+	return GotmuxSession{session: session}, pane, nil
+}
+
+// buildSessionOptions creates SessionOptions with name, shell command, and start directory.
+func buildSessionOptions(spec agent.Spec, sessionName string) *gotmux.SessionOptions {
+	options := &gotmux.SessionOptions{
+		Name:         sessionName,
+		ShellCommand: spec.Command,
+	}
+	if strings.TrimSpace(spec.WorkDir) != "" {
+		options.StartDirectory = spec.WorkDir
+	}
+	return options
 }
 
