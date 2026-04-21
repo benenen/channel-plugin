@@ -16,6 +16,7 @@ import (
 	"github.com/benenen/myclaw/internal/domain"
 	"github.com/benenen/myclaw/internal/store"
 	"github.com/benenen/myclaw/internal/store/repositories"
+	"github.com/benenen/myclaw/internal/tmux"
 )
 
 const currentTMUXRunIDFileName = ".myclaw-run-id"
@@ -51,14 +52,9 @@ type TMUXRuntime struct {
 	runStore tmuxRunStore
 }
 
-type tmuxPane interface {
-	SendKeys(keys ...string) error
-	CapturePane() (string, error)
-}
+type tmuxPane = tmux.Pane
 
-type tmuxSession interface {
-	Kill() error
-}
+type tmuxSession = tmux.Session
 
 type tmuxRuntimeFactory interface {
 	Start(ctx context.Context, spec agent.Spec, sessionName string) (tmuxSession, tmuxPane, error)
@@ -94,7 +90,7 @@ type tmuxGotmuxPane struct {
 // NewTMUXDriver creates a new TMUXDriver with default factories.
 func NewTMUXDriver() *TMUXDriver {
 	return &TMUXDriver{
-		factory:         tmuxGotmuxFactory{},
+		factory:         tmux.GotmuxFactory{},
 		runStoreFactory: sqliteTMUXRunStoreFactory{},
 	}
 }
