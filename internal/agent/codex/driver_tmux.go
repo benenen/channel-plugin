@@ -16,6 +16,7 @@ import (
 	"github.com/benenen/myclaw/internal/domain"
 	"github.com/benenen/myclaw/internal/store"
 	"github.com/benenen/myclaw/internal/store/repositories"
+	"github.com/benenen/myclaw/internal/tmux"
 )
 
 const currentTMUXRunIDFileName = ".myclaw-run-id"
@@ -30,25 +31,16 @@ type TMUXRuntime struct {
 	runMu sync.Mutex
 
 	state    runtimeState
-	pane     tmuxPane
-	session  tmuxSession
+	pane     tmux.Pane
+	session  tmux.Session
 	readErr  error
 	waitGap  time.Duration
 	spec     agent.Spec
 	runStore tmuxRunStore
 }
 
-type tmuxPane interface {
-	SendKeys(keys ...string) error
-	CapturePane() (string, error)
-}
-
-type tmuxSession interface {
-	Kill() error
-}
-
 type tmuxRuntimeFactory interface {
-	Start(ctx context.Context, spec agent.Spec, sessionName string) (tmuxSession, tmuxPane, error)
+	Start(ctx context.Context, spec agent.Spec, sessionName string) (tmux.Session, tmux.Pane, error)
 }
 
 type tmuxRunRecord struct {
@@ -86,7 +78,7 @@ func init() {
 
 func NewTMUXDriver() *TMUXDriver {
 	return &TMUXDriver{
-		factory:         tmuxGotmuxFactory{},
+		factory:         tmux.GotmuxFactory{},
 		runStoreFactory: sqliteTMUXRunStoreFactory{},
 	}
 }
@@ -107,7 +99,7 @@ func (d *TMUXDriver) Init(ctx context.Context, spec agent.Spec) (agent.SessionRu
 	if d != nil {
 		runtimeFactory := d.factory
 		if runtimeFactory == nil {
-			runtimeFactory = tmuxGotmuxFactory{}
+			runtimeFactory = tmux.GotmuxFactory{}
 		}
 		session, pane, err := runtimeFactory.Start(ctx, spec, nextTMUXSessionName(spec.BotName))
 		if err != nil {
