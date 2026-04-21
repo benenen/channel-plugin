@@ -132,3 +132,30 @@ func buildSessionOptions(spec agent.Spec, sessionName string) *gotmux.SessionOpt
 	return options
 }
 
+// NormalizeTMUXOutput normalizes line endings in tmux output.
+func NormalizeTMUXOutput(text string) string {
+	return strings.ReplaceAll(text, "\r\n", "\n")
+}
+
+// CleanupTMUXRunText removes empty lines and trailing carriage returns from tmux output.
+func CleanupTMUXRunText(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	cleaned := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		cleaned = append(cleaned, strings.TrimRight(line, "\r"))
+	}
+	return strings.TrimSpace(strings.Join(cleaned, "\n"))
+}
+
+// ShellQuote quotes a string for safe use in shell commands.
+func ShellQuote(text string) string {
+	if text == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
+}
+
