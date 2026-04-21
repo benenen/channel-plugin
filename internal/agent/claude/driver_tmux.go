@@ -144,3 +144,69 @@ func (d *TMUXDriver) Init(ctx context.Context, spec agent.Spec) (agent.SessionRu
 
 	return runtime, nil
 }
+
+// markBroken sets the runtime to broken state with the given error.
+func (r *TMUXRuntime) markBroken(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.readErr = err
+	r.state = stateBroken
+}
+
+// currentError returns the current error if the runtime is broken.
+func (r *TMUXRuntime) currentError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.readErr != nil {
+		return r.readErr
+	}
+	return errors.New("runtime is broken")
+}
+
+// waitUntilReady polls the pane until output appears.
+func (r *TMUXRuntime) waitUntilReady(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		output, err := r.pane.CapturePane()
+		if err != nil {
+			return fmt.Errorf("failed to capture pane: %w", err)
+		}
+
+		normalized := normalizeTMUXOutput(output)
+		if normalized != "" {
+			r.mu.Lock()
+			r.state = stateReady
+			r.mu.Unlock()
+			return nil
+		}
+
+		time.Sleep(r.waitGap)
+	}
+}
+
+// waitRunCompletion polls the run store until the run is done.
+func (r *TMUXRuntime) waitRunCompletion(ctx context.Context, runID string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		record, err := r.runStore.GetByRunID(ctx, runID)
+		if err != nil {
+			return fmt.Errorf("failed to get run record: %w", err)
+		}
+
+		if record.Status == "done" {
+			return nil
+		}
+
+		time.Sleep(r.waitGap)
+	}
+}
