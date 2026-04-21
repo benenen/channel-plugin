@@ -1,6 +1,10 @@
 package tmux
 
-import "github.com/GianlucaP106/gotmux/gotmux"
+import (
+	"fmt"
+
+	"github.com/GianlucaP106/gotmux/gotmux"
+)
 
 // Pane represents a tmux pane interface for sending keys and capturing output.
 type Pane interface {
@@ -25,4 +29,15 @@ type GotmuxPane struct {
 
 // GotmuxFactory creates gotmux-backed Session and Pane instances.
 type GotmuxFactory struct{}
+
+// Kill terminates the tmux session.
+func (s GotmuxSession) Kill() error {
+	if s.session == nil {
+		return nil
+	}
+	if err := s.session.Kill(); err != nil {
+		return fmt.Errorf("kill tmux session %q: %w", s.session.Name, err)
+	}
+	return nil
+}
 
