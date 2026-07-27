@@ -39,6 +39,9 @@ func stubProcCwd(fn func(pid int) (string, bool)) func() {
 type asdSessionRow struct {
 	name, title string
 	idleMs      int64
+	status      string // "" → running
+	command     string
+	attached    int
 }
 
 // fakeAsdCLI mimics the real asd CLI: `list` renders the table (no JSON mode),
@@ -56,7 +59,12 @@ func fakeAsdCLI(rows ...asdSessionRow) func(args ...string) ([]byte, int, error)
 		case "inspect":
 			for _, r := range rows {
 				if r.name == args[1] {
-					return []byte(fmt.Sprintf(`{"session":%q,"title":%q,"idle_ms":%d}`, r.name, r.title, r.idleMs)), 0, nil
+					status := r.status
+					if status == "" {
+						status = "running"
+					}
+					return []byte(fmt.Sprintf(`{"session":%q,"title":%q,"idle_ms":%d,"status":%q,"command":%q,"attached_clients":%d}`,
+						r.name, r.title, r.idleMs, status, r.command, r.attached)), 0, nil
 				}
 			}
 			return nil, 1, nil
@@ -650,5 +658,53 @@ func TestConfigWarnings(t *testing.T) {
 func TestConfigWarningsCleanConfig(t *testing.T) {
 	if got := configWarnings([]Source{{Kind: "http", Name: "w"}, {Kind: "asd", Exclude: []string{"root", "priv-*"}}}); len(got) != 0 {
 		t.Fatalf("a valid config warns about nothing, got %v", got)
+	}
+}
+
+// A resource read carries the session's live state, not just its routing
+// fields: codex clients see MCP resources but no MCP tools, so this payload is
+// all they get.
+func TestSessionDetailCarriesLiveState(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{
+		name: "build", title: "a build", idleMs: 42,
+		status: "idle", command: "claude --resume", attached: 2,
+	}))()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	d, ok := asdSessionDetail(context.Background(), nil, "build")
+	if !ok {
+		t.Fatal("want ok")
+	}
+	if d.Status != "idle" || !d.Attached || d.Command != "claude --resume" || d.IdleMS != 42 {
+		t.Fatalf("live state lost: %+v", d)
+	}
+}
+
+func TestSessionDetailUnattached(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", status: "running", attached: 0}))()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	d, _ := asdSessionDetail(context.Background(), nil, "build")
+	if d.Attached || d.Status != "running" {
+		t.Fatalf("attached=%v status=%q, want false/running", d.Attached, d.Status)
+	}
+}
+
+func TestRosterDetailedCarriesLiveState(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(
+		asdSessionRow{name: "build", status: "running", attached: 1, command: "make"},
+		asdSessionRow{name: "chat", status: "idle", command: "bash"},
+	))()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	got := asdRosterDetailed(context.Background(), nil)
+	if len(got) != 2 {
+		t.Fatalf("roster: %+v", got)
+	}
+	if got[0].Status != "running" || !got[0].Attached || got[0].Command != "make" {
+		t.Fatalf("build: %+v", got[0])
+	}
+	if got[1].Status != "idle" || got[1].Attached {
+		t.Fatalf("chat: %+v", got[1])
 	}
 }

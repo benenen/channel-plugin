@@ -155,6 +155,11 @@ type asdSession struct {
 	Title  string `json:"title"`
 	IdleMS int64  `json:"idle_ms"`
 	Pid    int    `json:"pid"`
+	// Live state, straight from `asd inspect --json`. Without these a reader
+	// can only guess a session's state from the spinner glyph in its title.
+	Status          string `json:"status"`  // asd's own word: running | idle
+	Command         string `json:"command"` // what the session was started with
+	AttachedClients int    `json:"attached_clients"`
 }
 
 // sizeColumn matches the SIZE column ("181x55") of `asd list`, which every
@@ -286,10 +291,16 @@ func asdRoster(ctx context.Context) []asdSession {
 	return sessions
 }
 
-// SessionDetail is the read payload for a single asd session resource.
+// SessionDetail is the read payload for a single asd session resource. It is
+// the only channel some clients have: codex injects MCP resources but not MCP
+// tools, so a2a_list is invisible there and this payload has to stand alone —
+// hence the live state fields, not just the routing ones.
 type SessionDetail struct {
 	Name       string `json:"name"`
 	Title      string `json:"title"`
+	Status     string `json:"status"`   // running | idle, as asd reports it
+	Attached   bool   `json:"attached"` // a client is currently attached
+	Command    string `json:"command"`
 	IdleMS     int64  `json:"idle_ms"`
 	Cwd        string `json:"cwd"`
 	Capability string `json:"capability"`
@@ -297,7 +308,14 @@ type SessionDetail struct {
 
 // enrichSession fills a session's cwd + capability from where it is running.
 func enrichSession(s asdSession) SessionDetail {
-	d := SessionDetail{Name: s.Name, Title: s.Title, IdleMS: s.IdleMS}
+	d := SessionDetail{
+		Name:     s.Name,
+		Title:    s.Title,
+		Status:   s.Status,
+		Attached: s.AttachedClients > 0,
+		Command:  s.Command,
+		IdleMS:   s.IdleMS,
+	}
 	if cwd, ok := sessionCwd(s); ok {
 		d.Cwd = cwd
 		if cap, ok := asdCapabilitiesDescription(cwd); ok {
