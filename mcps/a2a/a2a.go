@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -30,6 +31,11 @@ type Source struct {
 	Endpoint    string `json:"endpoint,omitempty"`
 	AuthToken   string `json:"auth_token,omitempty"`
 	WaitTimeout string `json:"wait_timeout,omitempty"` // asd source default for dispatched waits
+	// Include/Exclude gate which live sessions an asd source exposes (shell
+	// globs; a plain name is an exact match). Without them every session on the
+	// box becomes a dispatch target, including the caller's own.
+	Include []string `json:"include,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 func (s Source) kind() string {
@@ -37,6 +43,69 @@ func (s Source) kind() string {
 		return kindHTTP
 	}
 	return s.Kind
+}
+
+// allowsSession reports whether this source exposes the named session: an
+// exclude match always wins, and an empty include list means "every name".
+func (s Source) allowsSession(name string) bool {
+	for _, pat := range s.Exclude {
+		if matchGlob(pat, name) {
+			return false
+		}
+	}
+	if len(s.Include) == 0 {
+		return true
+	}
+	for _, pat := range s.Include {
+		if matchGlob(pat, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchGlob is path.Match with an unparsable pattern treated as "no match";
+// configWarnings reports those patterns at startup so they aren't silent.
+func matchGlob(pattern, name string) bool {
+	ok, err := path.Match(pattern, name)
+	return err == nil && ok
+}
+
+// visibleSession reports whether the config exposes this session at all. Each
+// asd source contributes its own filtered view, so a session allowed by any of
+// them is visible. A config with no asd source has nothing to filter on, and
+// the roster stays informational (dispatch refuses it either way).
+func visibleSession(sources []Source, name string) bool {
+	filtered := false
+	for _, s := range sources {
+		if s.kind() != kindAsd {
+			continue
+		}
+		filtered = true
+		if s.allowsSession(name) {
+			return true
+		}
+	}
+	return !filtered
+}
+
+// configWarnings reports config mistakes that would otherwise fail silently: a
+// source whose kind nothing dispatches to (the boo→asd rename made this a real
+// failure mode — an unknown kind resolves to zero servers with no error), and a
+// filter pattern path.Match cannot parse.
+func configWarnings(sources []Source) []string {
+	var out []string
+	for i, s := range sources {
+		if k := s.kind(); k != kindHTTP && k != kindAsd {
+			out = append(out, fmt.Sprintf("source #%d (%q) has unknown kind %q and is ignored (want %q or %q)", i, s.Name, k, kindHTTP, kindAsd))
+		}
+		for _, pat := range append(append([]string{}, s.Include...), s.Exclude...) {
+			if _, err := path.Match(pat, "probe"); err != nil {
+				out = append(out, fmt.Sprintf("source #%d (%q) has invalid filter pattern %q; it will never match", i, s.Name, pat))
+			}
+		}
+	}
+	return out
 }
 
 // ResolvedServer is a dispatchable target after expanding sources.
@@ -238,24 +307,37 @@ func enrichSession(s asdSession) SessionDetail {
 	return d
 }
 
-// asdRosterDetailed returns every live session enriched with cwd + capability,
-// so a single roster read carries enough for routing decisions.
-func asdRosterDetailed(ctx context.Context) []SessionDetail {
+// asdRosterDetailed returns every config-visible session enriched with cwd +
+// capability, so a single roster read carries enough for routing decisions.
+func asdRosterDetailed(ctx context.Context, sources []Source) []SessionDetail {
 	out := []SessionDetail{}
 	for _, s := range asdRoster(ctx) {
+		if !visibleSession(sources, s.Name) {
+			continue
+		}
 		out = append(out, enrichSession(s))
 	}
 	return out
 }
 
-// asdSessionDetail returns one live session's detail (false if not a live session).
-func asdSessionDetail(ctx context.Context, name string) (SessionDetail, bool) {
-	for _, s := range asdRoster(ctx) {
-		if s.Name == name {
-			return enrichSession(s), true
-		}
+// asdSessionDetail returns one live session's detail (false if the config hides
+// it or it is not live). One `inspect` — reading one session never walks the
+// whole roster.
+func asdSessionDetail(ctx context.Context, sources []Source, name string) (SessionDetail, bool) {
+	if name == "" || !visibleSession(sources, name) {
+		return SessionDetail{}, false
 	}
-	return SessionDetail{}, false
+	out, _, code, err := runAsd(ctx, "inspect", name, "--json")
+	if err != nil || code != 0 {
+		return SessionDetail{}, false
+	}
+	var s asdSession
+	if err := json.Unmarshal(out, &s); err != nil {
+		log.Printf("a2a: parse asd inspect --json for %s: %v", name, err)
+		return SessionDetail{}, false
+	}
+	s.Name = name // `inspect` names the field "session", not "name"
+	return enrichSession(s), true
 }
 
 // resolve expands sources into live servers. http passes through; an asd source
@@ -288,6 +370,9 @@ func resolve(ctx context.Context, sources []Source) []ResolvedServer {
 			wt = "60s"
 		}
 		for _, sess := range sessions {
+			if !s.allowsSession(sess.Name) {
+				continue
+			}
 			desc := sess.Title
 			if cwd, ok := sessionCwd(sess); ok {
 				if cap, ok := asdCapabilitiesDescription(cwd); ok {

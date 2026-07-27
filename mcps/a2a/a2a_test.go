@@ -506,7 +506,7 @@ func TestAsdSessionDetailLiveWithCapability(t *testing.T) {
 	useSessionList(t, map[string]string{"build": cwd})
 	os.WriteFile(filepath.Join(cwd, "asd.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
 
-	d, ok := asdSessionDetail(context.Background(), "build")
+	d, ok := asdSessionDetail(context.Background(), nil, "build")
 	if !ok || d.Name != "build" || d.Title != "a build" || d.IdleMS != 7 || d.Cwd != cwd || d.Capability != "go coder" {
 		t.Fatalf("detail: %+v ok=%v", d, ok)
 	}
@@ -514,7 +514,7 @@ func TestAsdSessionDetailLiveWithCapability(t *testing.T) {
 
 func TestAsdSessionDetailUnknownIsNotOk(t *testing.T) {
 	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "a build"}))()
-	if _, ok := asdSessionDetail(context.Background(), "ghost"); ok {
+	if _, ok := asdSessionDetail(context.Background(), nil, "ghost"); ok {
 		t.Fatal("unknown session must be !ok")
 	}
 }
@@ -522,7 +522,7 @@ func TestAsdSessionDetailUnknownIsNotOk(t *testing.T) {
 func TestAsdSessionDetailLiveNoCapability(t *testing.T) {
 	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "a build"}))()
 	t.Setenv("XDG_DATA_HOME", t.TempDir()) // no sessions.tsv → no cwd
-	d, ok := asdSessionDetail(context.Background(), "build")
+	d, ok := asdSessionDetail(context.Background(), nil, "build")
 	if !ok || d.Capability != "" || d.Cwd != "" {
 		t.Fatalf("detail: %+v ok=%v (want ok, empty cap/cwd)", d, ok)
 	}
@@ -534,8 +534,121 @@ func TestAsdRosterDetailedEnrichesCapability(t *testing.T) {
 	useSessionList(t, map[string]string{"build": cwd})
 	os.WriteFile(filepath.Join(cwd, "asd.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
 
-	got := asdRosterDetailed(context.Background())
+	got := asdRosterDetailed(context.Background(), nil)
 	if len(got) != 1 || got[0].Name != "build" || got[0].Capability != "go coder" || got[0].Cwd != cwd {
 		t.Fatalf("detailed roster: %+v", got)
+	}
+}
+
+func TestSourceAllowsSession(t *testing.T) {
+	cases := []struct {
+		name    string
+		src     Source
+		session string
+		want    bool
+	}{
+		{"no filter allows all", Source{}, "build", true},
+		{"include exact match", Source{Include: []string{"build"}}, "build", true},
+		{"include misses", Source{Include: []string{"build"}}, "chat", false},
+		{"include glob", Source{Include: []string{"bot-*"}}, "bot-1", true},
+		{"exclude wins over include", Source{Include: []string{"*"}, Exclude: []string{"root"}}, "root", false},
+		{"exclude glob", Source{Exclude: []string{"priv-*"}}, "priv-a", false},
+		{"exclude leaves others", Source{Exclude: []string{"priv-*"}}, "build", true},
+		{"malformed pattern never matches", Source{Include: []string{"["}}, "[", false},
+	}
+	for _, c := range cases {
+		if got := c.src.allowsSession(c.session); got != c.want {
+			t.Errorf("%s: allowsSession(%q) = %v, want %v", c.name, c.session, got, c.want)
+		}
+	}
+}
+
+func TestResolveAsdAppliesFilter(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	defer stubAsd(fakeAsdCLI(
+		asdSessionRow{name: "build", title: "a build"},
+		asdSessionRow{name: "root", title: "a root"},
+	))()
+	got := resolve(context.Background(), []Source{{Kind: "asd", Exclude: []string{"root"}}})
+	if len(got) != 1 || got[0].Name != "build" {
+		t.Fatalf("excluded session must not resolve: %+v", got)
+	}
+}
+
+func TestVisibleSession(t *testing.T) {
+	asd := []Source{{Kind: "asd", Include: []string{"build"}}}
+	if !visibleSession(asd, "build") || visibleSession(asd, "root") {
+		t.Fatal("asd source must gate visibility by its filter")
+	}
+	// Two asd sources: allowed by either one is enough.
+	two := []Source{{Kind: "asd", Include: []string{"build"}}, {Kind: "asd", Include: []string{"root"}}}
+	if !visibleSession(two, "root") {
+		t.Fatal("a session allowed by any asd source is visible")
+	}
+	// No asd source: nothing to filter on, so the roster stays informational.
+	if !visibleSession([]Source{{Kind: "http", Name: "w"}}, "anything") {
+		t.Fatal("without an asd source every session stays visible")
+	}
+}
+
+func TestAsdRosterDetailedAppliesFilter(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	defer stubAsd(fakeAsdCLI(
+		asdSessionRow{name: "build", title: "a build"},
+		asdSessionRow{name: "root", title: "a root"},
+	))()
+	got := asdRosterDetailed(context.Background(), []Source{{Kind: "asd", Exclude: []string{"root"}}})
+	if len(got) != 1 || got[0].Name != "build" {
+		t.Fatalf("filtered roster: %+v", got)
+	}
+}
+
+func TestAsdSessionDetailFilteredIsNotOk(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "root", title: "a root"}))()
+	if _, ok := asdSessionDetail(context.Background(), []Source{{Kind: "asd", Exclude: []string{"root"}}}, "root"); ok {
+		t.Fatal("an excluded session must not be readable as a resource")
+	}
+}
+
+// One session's detail is one `inspect` call — not a full roster walk.
+func TestAsdSessionDetailUsesSingleInspect(t *testing.T) {
+	var calls [][]string
+	real := fakeAsdCLI(asdSessionRow{name: "build", title: "a build", idleMs: 7})
+	defer stubAsd(func(args ...string) ([]byte, int, error) {
+		calls = append(calls, args)
+		return real(args...)
+	})()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	d, ok := asdSessionDetail(context.Background(), nil, "build")
+	if !ok || d.Name != "build" || d.Title != "a build" || d.IdleMS != 7 {
+		t.Fatalf("detail: %+v ok=%v", d, ok)
+	}
+	if len(calls) != 1 || calls[0][0] != "inspect" || calls[0][1] != "build" {
+		t.Fatalf("want a single `inspect build` call, got %v", calls)
+	}
+}
+
+func TestConfigWarnings(t *testing.T) {
+	got := configWarnings([]Source{
+		{Kind: "http", Name: "w"},
+		{Kind: "asd"},
+		{Kind: "boo", Name: "stale"},
+		{Kind: "asd", Include: []string{"["}},
+	})
+	if len(got) != 2 {
+		t.Fatalf("want one unknown-kind + one bad-pattern warning, got %v", got)
+	}
+	if !strings.Contains(got[0], "boo") || !strings.Contains(got[0], "stale") {
+		t.Fatalf("unknown-kind warning should name the kind and source: %q", got[0])
+	}
+	if !strings.Contains(got[1], "[") {
+		t.Fatalf("bad-pattern warning should quote the pattern: %q", got[1])
+	}
+}
+
+func TestConfigWarningsCleanConfig(t *testing.T) {
+	if got := configWarnings([]Source{{Kind: "http", Name: "w"}, {Kind: "asd", Exclude: []string{"root", "priv-*"}}}); len(got) != 0 {
+		t.Fatalf("a valid config warns about nothing, got %v", got)
 	}
 }

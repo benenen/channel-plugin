@@ -21,6 +21,11 @@ func main() {
 		log.Printf("a2a: config load failed, continuing with no sources: %v", err)
 		sources = nil
 	}
+	// A source that resolves to nothing is otherwise invisible: a2a_list just
+	// comes back short. Say so once, at startup.
+	for _, w := range configWarnings(sources) {
+		log.Printf("a2a: config %q: %s", *configPath, w)
+	}
 	client := newA2AClient(http.DefaultClient)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "a2a", Version: "0.1.0"}, nil)
@@ -40,7 +45,7 @@ func main() {
 		Description: "Live asd sessions you can route subtasks to, each with its capability. Read asd://session/<name> for one session's full detail.",
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		data, _ := json.Marshal(map[string]any{"sessions": asdRosterDetailed(ctx)})
+		data, _ := json.Marshal(map[string]any{"sessions": asdRosterDetailed(ctx, sources)})
 		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{
 			{URI: "asd://sessions", MIMEType: "application/json", Text: string(data)},
 		}}, nil
@@ -54,7 +59,7 @@ func main() {
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		name := strings.TrimPrefix(req.Params.URI, "asd://session/")
-		detail, ok := asdSessionDetail(ctx, name)
+		detail, ok := asdSessionDetail(ctx, sources, name)
 		if !ok {
 			return nil, mcp.ResourceNotFoundError(req.Params.URI)
 		}
