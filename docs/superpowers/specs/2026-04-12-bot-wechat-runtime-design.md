@@ -170,7 +170,7 @@ Add tests for:
 - `RefreshLogin` triggers runtime startup after successful login
 - failed runtime startup leaves bot in `error`
 
-### Bootstrap tests
+### Asdtstrap tests
 - startup restore attempts runtimes for bots with linked accounts
 - startup restore does not fail app bootstrap when one runtime fails
 

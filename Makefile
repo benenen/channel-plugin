@@ -21,15 +21,15 @@ mcp-echo:
 mcp-ping:
 	go build -o bin/mcp-ping ./mcps/ping
 
-mcp-boo:
-	go build -o bin/mcp-boo ./mcps/boo
+mcp-asd:
+	go build -o bin/mcp-asd ./mcps/asd
 
 mcp-a2a:
 	go build -o bin/mcp-a2a ./mcps/a2a
 
-mcps: mcp-echo mcp-ping mcp-boo mcp-a2a
+mcps: mcp-echo mcp-ping mcp-asd mcp-a2a
 
 test-mcps:
-	go test ./mcps/echo/... ./mcps/ping/... ./mcps/boo/... ./mcps/a2a/...
+	go test ./mcps/echo/... ./mcps/ping/... ./mcps/asd/... ./mcps/a2a/...
 
-.PHONY: test run watch mcp-echo mcp-ping mcp-boo mcp-a2a mcps test-mcps
+.PHONY: test run watch mcp-echo mcp-ping mcp-asd mcp-a2a mcps test-mcps

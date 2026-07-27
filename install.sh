@@ -29,7 +29,7 @@ RUN_USER="$(id -un)"
 HTTP_ADDR=":8080"
 DO_BUILD=1
 ENV_FILE=""
-MCPS=(a2a boo echo ping)   # built as bin/mcp-<x> → installed as <x>-mcp
+MCPS=(a2a asd echo ping)   # built as bin/mcp-<x> → installed as <x>-mcp
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 

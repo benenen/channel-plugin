@@ -446,7 +446,7 @@ orchestrator := app.NewBotMessageOrchestrator(agentManager, replyGateway, resolv
 
 - [ ] **Step 5: Run the focused app/bootstrap tests and verify they pass**
 
-Run: `go test ./internal/app ./internal/bootstrap -run 'TestAgentCapabilityScannerMarksDetectedAndMissingCommands|TestBotAgentResolverReturnsConfiguredSpec|TestOrchestratorUsesResolvedSpecPerBot|TestBootstrapBuildsDependencies'`
+Run: `go test ./internal/app ./internal/bootstrap -run 'TestAgentCapabilityScannerMarksDetectedAndMissingCommands|TestBotAgentResolverReturnsConfiguredSpec|TestOrchestratorUsesResolvedSpecPerBot|TestAsdtstrapBuildsDependencies'`
 Expected: PASS
 
 - [ ] **Step 6: Commit the scanner and resolver changes**

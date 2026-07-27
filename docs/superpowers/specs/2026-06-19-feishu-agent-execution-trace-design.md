@@ -12,7 +12,7 @@ streamed chunks. The only progress feedback is canned text: orchestrator (brain)
 bots send an immediate ack ("收到，正在处理…"); plain bots send nothing until the
 answer; errors map to busy/timeout/failed strings.
 
-Result: on a long turn (e.g. a 26s `boo ls` that builds a markdown table) the
+Result: on a long turn (e.g. a 26s `asd ls` that builds a markdown table) the
 user stares at silence and cannot tell whether the bot is working, wedged, or
 dead. We want to surface **what the agent is doing** while it works.
 

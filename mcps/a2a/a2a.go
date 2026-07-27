@@ -12,12 +12,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
 const (
 	kindHTTP = "http"
-	kindBoo  = "boo"
+	kindAsd  = "asd"
 )
 
 // Source is one config entry. kind defaults to "http".
@@ -27,7 +29,7 @@ type Source struct {
 	Description string `json:"description,omitempty"`
 	Endpoint    string `json:"endpoint,omitempty"`
 	AuthToken   string `json:"auth_token,omitempty"`
-	WaitTimeout string `json:"wait_timeout,omitempty"` // boo source default for dispatched waits
+	WaitTimeout string `json:"wait_timeout,omitempty"` // asd source default for dispatched waits
 }
 
 func (s Source) kind() string {
@@ -63,59 +65,108 @@ func loadSources(path string) ([]Source, error) {
 	return sources, nil
 }
 
-// runBoo is the single exec seam for the `boo` CLI; tests stub it.
-var runBoo = func(ctx context.Context, args ...string) (stdout []byte, exitCode int, err error) {
-	cmd := exec.CommandContext(ctx, "boo", args...)
+// runAsd is the single exec seam for the `asd` CLI; tests stub it. stderr is
+// returned because asd distinguishes a missing session by message, not by code.
+var runAsd = func(ctx context.Context, args ...string) (stdout []byte, stderr []byte, exitCode int, err error) {
+	cmd := exec.CommandContext(ctx, "asd", args...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		return out.Bytes(), exitErr.ExitCode(), nil
+		return out.Bytes(), errb.Bytes(), exitErr.ExitCode(), nil
 	}
 	if err != nil {
-		return out.Bytes(), -1, err
+		return out.Bytes(), errb.Bytes(), -1, err
 	}
-	return out.Bytes(), 0, nil
+	return out.Bytes(), errb.Bytes(), 0, nil
 }
 
-type booSession struct {
+type asdSession struct {
 	Name   string `json:"name"`
 	Title  string `json:"title"`
 	IdleMS int64  `json:"idle_ms"`
+	Pid    int    `json:"pid"`
 }
 
-// booConfigDir is where boo keeps per-session restore snapshots (<session>.state).
-func booConfigDir() string {
-	if c := os.Getenv("BOO_CONFIG"); c != "" {
-		return filepath.Dir(c)
+// sizeColumn matches the SIZE column ("181x55") of `asd list`, which every
+// session row has and neither the header nor the "no sessions" line does.
+var sizeColumn = regexp.MustCompile(`^\d+x\d+$`)
+
+// parseSessionNames pulls the NAME column out of `asd list` output. asd has no
+// `list --json`, so the table is the only roster the CLI offers.
+func parseSessionNames(stdout []byte) []string {
+	names := []string{}
+	for _, line := range strings.Split(string(stdout), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || !sizeColumn.MatchString(fields[1]) {
+			continue
+		}
+		names = append(names, fields[0])
 	}
-	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
-		return filepath.Join(x, "boo")
+	return names
+}
+
+// asdDataDir is asd's data directory (`$XDG_DATA_HOME/asd`, else
+// `~/.local/share/asd`), mirroring asd-proto's path contract.
+func asdDataDir() string {
+	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
+		return filepath.Join(x, "asd")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".config/boo"
+		return filepath.Join(".local", "share", "asd")
 	}
-	return filepath.Join(home, ".config", "boo")
+	return filepath.Join(home, ".local", "share", "asd")
 }
 
-// booSessionCwd reads the session's saved working directory from its snapshot.
-func booSessionCwd(session string) (string, bool) {
-	data, err := os.ReadFile(filepath.Join(booConfigDir(), session+".state"))
-	if err != nil {
+// procCwd reads a live process's working directory. Seam: tests stub it, and
+// on a platform without /proc it simply reports false and the caller falls back.
+var procCwd = func(pid int) (string, bool) {
+	if pid <= 0 {
 		return "", false
 	}
-	cwd := strings.TrimSpace(string(data))
-	if cwd == "" {
+	cwd, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "cwd"))
+	if err != nil || cwd == "" {
 		return "", false
 	}
 	return cwd, true
 }
 
-// booCapabilitiesDescription reads <cwd>/boo.capabilities.json and renders a
+// sessionCwd resolves the directory a session is working in. The live cwd of
+// its pid wins: the daemon samples sessions.tsv when it writes the file, so for
+// a session started as `cd <dir> && exec ...` that snapshot predates the cd.
+// The persisted list is the fallback (e.g. no /proc, or an unreadable pid).
+func sessionCwd(s asdSession) (string, bool) {
+	if cwd, ok := procCwd(s.Pid); ok {
+		return cwd, true
+	}
+	return asdSessionCwd(s.Name)
+}
+
+// asdSessionCwd reads a session's working directory from asd's persisted
+// session list (`<data dir>/sessions.tsv`, one `name\tcwd` line per session,
+// rewritten by the daemon on every create/rename/kill).
+func asdSessionCwd(session string) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(asdDataDir(), "sessions.tsv"))
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		name, cwd, found := strings.Cut(strings.TrimSuffix(line, "\r"), "\t")
+		if !found || name != session {
+			continue
+		}
+		if cwd = strings.TrimSpace(cwd); cwd != "" {
+			return cwd, true
+		}
+	}
+	return "", false
+}
+
+// asdCapabilitiesDescription reads <cwd>/asd.capabilities.json and renders a
 // description (with skills appended). Returns ("", false) if absent/invalid/empty.
-func booCapabilitiesDescription(cwd string) (string, bool) {
-	data, err := os.ReadFile(filepath.Join(cwd, "boo.capabilities.json"))
+func asdCapabilitiesDescription(cwd string) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(cwd, "asd.capabilities.json"))
 	if err != nil {
 		return "", false
 	}
@@ -139,25 +190,34 @@ func booCapabilitiesDescription(cwd string) (string, bool) {
 	return desc, true
 }
 
-// booRoster returns the live boo sessions (empty on any error).
-func booRoster(ctx context.Context) []booSession {
-	stdout, code, err := runBoo(ctx, "ls", "--json")
+// asdRoster returns the live asd sessions (empty on any error). `asd list`
+// prints a table with no per-session detail, so each name is then resolved with
+// `asd inspect --json`; a session that dies in between is skipped.
+func asdRoster(ctx context.Context) []asdSession {
+	stdout, _, code, err := runAsd(ctx, "list")
 	if err != nil || code != 0 {
-		log.Printf("a2a: boo ls failed (code=%d): %v", code, err)
-		return []booSession{}
+		log.Printf("a2a: asd list failed (code=%d): %v", code, err)
+		return []asdSession{}
 	}
-	var sessions []booSession
-	if err := json.Unmarshal(stdout, &sessions); err != nil {
-		log.Printf("a2a: boo ls --json parse failed: %v", err)
-		return []booSession{}
-	}
-	if sessions == nil {
-		sessions = []booSession{}
+	sessions := []asdSession{}
+	for _, name := range parseSessionNames(stdout) {
+		out, _, code, err := runAsd(ctx, "inspect", name, "--json")
+		if err != nil || code != 0 {
+			log.Printf("a2a: asd inspect %s failed (code=%d): %v", name, code, err)
+			continue
+		}
+		var s asdSession
+		if err := json.Unmarshal(out, &s); err != nil {
+			log.Printf("a2a: parse asd inspect --json for %s: %v", name, err)
+			continue
+		}
+		s.Name = name // `inspect` names the field "session", not "name"
+		sessions = append(sessions, s)
 	}
 	return sessions
 }
 
-// SessionDetail is the read payload for a single boo session resource.
+// SessionDetail is the read payload for a single asd session resource.
 type SessionDetail struct {
 	Name       string `json:"name"`
 	Title      string `json:"title"`
@@ -166,31 +226,31 @@ type SessionDetail struct {
 	Capability string `json:"capability"`
 }
 
-// enrichSession fills a session's cwd + capability from its boo snapshot.
-func enrichSession(s booSession) SessionDetail {
+// enrichSession fills a session's cwd + capability from where it is running.
+func enrichSession(s asdSession) SessionDetail {
 	d := SessionDetail{Name: s.Name, Title: s.Title, IdleMS: s.IdleMS}
-	if cwd, ok := booSessionCwd(s.Name); ok {
+	if cwd, ok := sessionCwd(s); ok {
 		d.Cwd = cwd
-		if cap, ok := booCapabilitiesDescription(cwd); ok {
+		if cap, ok := asdCapabilitiesDescription(cwd); ok {
 			d.Capability = cap
 		}
 	}
 	return d
 }
 
-// booRosterDetailed returns every live session enriched with cwd + capability,
+// asdRosterDetailed returns every live session enriched with cwd + capability,
 // so a single roster read carries enough for routing decisions.
-func booRosterDetailed(ctx context.Context) []SessionDetail {
+func asdRosterDetailed(ctx context.Context) []SessionDetail {
 	out := []SessionDetail{}
-	for _, s := range booRoster(ctx) {
+	for _, s := range asdRoster(ctx) {
 		out = append(out, enrichSession(s))
 	}
 	return out
 }
 
-// booSessionDetail returns one live session's detail (false if not a live session).
-func booSessionDetail(ctx context.Context, name string) (SessionDetail, bool) {
-	for _, s := range booRoster(ctx) {
+// asdSessionDetail returns one live session's detail (false if not a live session).
+func asdSessionDetail(ctx context.Context, name string) (SessionDetail, bool) {
+	for _, s := range asdRoster(ctx) {
 		if s.Name == name {
 			return enrichSession(s), true
 		}
@@ -198,9 +258,10 @@ func booSessionDetail(ctx context.Context, name string) (SessionDetail, bool) {
 	return SessionDetail{}, false
 }
 
-// resolve expands sources into live servers. http passes through; a boo source
-// runs `boo ls --json` and emits one server per session. boo failures are logged
-// and skipped (http sources still resolve). Duplicate names are dropped (first wins).
+// resolve expands sources into live servers. http passes through; an asd source
+// reads the live roster and emits one server per session. asd failures are
+// logged and skipped (http sources still resolve). Duplicate names are dropped
+// (first wins).
 func resolve(ctx context.Context, sources []Source) []ResolvedServer {
 	var out []ResolvedServer
 	seen := map[string]bool{}
@@ -218,33 +279,22 @@ func resolve(ctx context.Context, sources []Source) []ResolvedServer {
 		add(ResolvedServer{Name: s.Name, Description: s.Description, Kind: kindHTTP, Endpoint: s.Endpoint, AuthToken: s.AuthToken})
 	}
 	for _, s := range sources {
-		if s.kind() != kindBoo {
+		if s.kind() != kindAsd {
 			continue
 		}
-		stdout, code, err := runBoo(ctx, "ls", "--json")
-		if err != nil || code != 0 {
-			log.Printf("a2a: boo ls failed (skipping boo sessions): code=%d err=%v", code, err)
-			continue
-		}
-		var sessions []booSession
-		if len(bytes.TrimSpace(stdout)) > 0 {
-			if err := json.Unmarshal(stdout, &sessions); err != nil {
-				log.Printf("a2a: parse boo ls --json: %v", err)
-				continue
-			}
-		}
+		sessions := asdRoster(ctx)
 		wt := s.WaitTimeout
 		if wt == "" {
 			wt = "60s"
 		}
 		for _, sess := range sessions {
 			desc := sess.Title
-			if cwd, ok := booSessionCwd(sess.Name); ok {
-				if cap, ok := booCapabilitiesDescription(cwd); ok {
+			if cwd, ok := sessionCwd(sess); ok {
+				if cap, ok := asdCapabilitiesDescription(cwd); ok {
 					desc = cap
 				}
 			}
-			add(ResolvedServer{Name: sess.Name, Description: desc, Kind: kindBoo, Session: sess.Name, WaitTimeout: wt})
+			add(ResolvedServer{Name: sess.Name, Description: desc, Kind: kindAsd, Session: sess.Name, WaitTimeout: wt})
 		}
 	}
 	return out
@@ -426,8 +476,8 @@ func runDispatch(ctx context.Context, sources []Source, c *a2aClient, in Dispatc
 			return DispatchOutput{}, err
 		}
 		return DispatchOutput{Result: result}, nil
-	case kindBoo:
-		result, err := dispatchBoo(ctx, target.Session, in.Prompt, target.WaitTimeout)
+	case kindAsd:
+		result, err := dispatchAsd(ctx, target.Session, in.Prompt, target.WaitTimeout)
 		if err != nil {
 			return DispatchOutput{}, err
 		}
@@ -437,11 +487,11 @@ func runDispatch(ctx context.Context, sources []Source, c *a2aClient, in Dispatc
 	}
 }
 
-// dispatchBoo types the prompt into a boo session, waits for it to settle, and
+// dispatchAsd types the prompt into an asd session, waits for it to settle, and
 // returns the newly-produced scrollback (best-effort: a terminal is not a clean
 // request/response channel).
-func dispatchBoo(ctx context.Context, session, prompt, waitTimeout string) (string, error) {
-	before, err := booPeek(ctx, session)
+func dispatchAsd(ctx context.Context, session, prompt, waitTimeout string) (string, error) {
+	before, err := asdPeek(ctx, session)
 	if err != nil {
 		return "", err
 	}
@@ -449,20 +499,20 @@ func dispatchBoo(ctx context.Context, session, prompt, waitTimeout string) (stri
 	// produce a phantom empty element (strings.Split("a\n","\n") → ["a",""] = 2).
 	beforeLines := strings.Count(before, "\n")
 
-	if _, code, err := runBoo(ctx, "send", session, "--text", prompt, "--enter"); err != nil {
-		return "", fmt.Errorf("boo not available: %w", err)
-	} else if e := booDispatchErr(session, code); e != nil {
+	if _, errb, code, err := runAsd(ctx, "send", session, "--text", prompt, "--enter"); err != nil {
+		return "", fmt.Errorf("asd not available: %w", err)
+	} else if e := asdDispatchErr(session, code, errb); e != nil {
 		return "", e
 	}
 
 	// wait is a settle hint; timeout (exit 4) is non-fatal.
-	if _, code, err := runBoo(ctx, "wait", session, "--idle", "--timeout", waitTimeout); err != nil {
-		return "", fmt.Errorf("boo not available: %w", err)
-	} else if e := booDispatchErr(session, code); e != nil {
+	if _, errb, code, err := runAsd(ctx, "wait", session, "--idle", "--timeout", waitTimeout); err != nil {
+		return "", fmt.Errorf("asd not available: %w", err)
+	} else if e := asdDispatchErr(session, code, errb); e != nil {
 		return "", e
 	}
 
-	after, err := booPeek(ctx, session)
+	after, err := asdPeek(ctx, session)
 	if err != nil {
 		return "", err
 	}
@@ -474,26 +524,32 @@ func dispatchBoo(ctx context.Context, session, prompt, waitTimeout string) (stri
 	return trimDelta(delta, prompt), nil
 }
 
-func booPeek(ctx context.Context, session string) (string, error) {
-	out, code, err := runBoo(ctx, "peek", session, "--scrollback")
+func asdPeek(ctx context.Context, session string) (string, error) {
+	out, errb, code, err := runAsd(ctx, "peek", session, "--scrollback")
 	if err != nil {
-		return "", fmt.Errorf("boo not available: %w", err)
+		return "", fmt.Errorf("asd not available: %w", err)
 	}
-	if e := booDispatchErr(session, code); e != nil {
+	if e := asdDispatchErr(session, code, errb); e != nil {
 		return "", e
 	}
 	return string(out), nil
 }
 
-func booDispatchErr(session string, code int) error {
-	switch code {
-	case 0, 4: // 4 = wait timeout, non-fatal
+// asdDispatchErr maps one CLI call's outcome to a dispatch error. asd reports a
+// missing session as a generic exit 1 with a message on stderr — and words it
+// "no session named" in `wait` but "no such session" everywhere else.
+func asdDispatchErr(session string, code int, stderr []byte) error {
+	if code == 0 || code == 4 { // 4 = wait timeout, non-fatal
 		return nil
-	case 3:
-		return fmt.Errorf("boo session not running: %s", session)
-	default:
-		return fmt.Errorf("boo error (exit %d) for session %s", code, session)
 	}
+	msg := string(stderr)
+	if strings.Contains(msg, "no such session") || strings.Contains(msg, "no session named") {
+		return fmt.Errorf("asd session not running: %s", session)
+	}
+	if m := strings.TrimSpace(msg); m != "" {
+		return fmt.Errorf("asd error for session %s: %s", session, m)
+	}
+	return fmt.Errorf("asd error (exit %d) for session %s", code, session)
 }
 
 // trimDelta cleans the raw scrollback delta:

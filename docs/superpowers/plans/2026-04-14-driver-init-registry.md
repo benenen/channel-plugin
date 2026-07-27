@@ -520,7 +520,7 @@ git commit -m "feat: initialize oneshot runtime per bot session"
 Add to `internal/bootstrap/bootstrap_test.go`:
 
 ```go
-func TestBootstrapBuildsConfiguredAgentSpec(t *testing.T) {
+func TestAsdtstrapBuildsConfiguredAgentSpec(t *testing.T) {
 	key := make([]byte, 32)
 	_, _ = rand.Read(key)
 	os.Setenv("CHANNEL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
@@ -548,7 +548,7 @@ This guards that bootstrap still constructs successfully after removing concrete
 
 - [ ] **Step 2: Run the focused bootstrap test to verify current behavior**
 
-Run: `go test ./internal/bootstrap -run TestBootstrapBuildsConfiguredAgentSpec -v`
+Run: `go test ./internal/bootstrap -run TestAsdtstrapBuildsConfiguredAgentSpec -v`
 Expected: PASS or FAIL depending on current constructor shape; if it passes, keep it as the guardrail before code change.
 
 - [ ] **Step 3: Refactor bootstrap to stop passing a concrete driver into `agent.NewManager`**
@@ -628,4 +628,4 @@ git commit -m "test: verify driver init registry flow"
 - `Driver`, `SessionRuntime`, `DriverFactory`, `LookupDriver`, and `MustRegisterDriver` are introduced in Task 1 and used consistently afterward.
 - `NewSession(ctx, spec)` is introduced in Task 2 and used consistently by the manager in Task 3.
 - `OneshotRuntime.Run(ctx, req)` in Task 4 matches the `SessionRuntime` contract defined in Task 1.
-- Bootstrap in Task 5 relies on `Spec.Type = "oneshot"`, matching the registration name from Task 4.
+- Asdtstrap in Task 5 relies on `Spec.Type = "oneshot"`, matching the registration name from Task 4.

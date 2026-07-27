@@ -52,9 +52,9 @@ package agent
 import "testing"
 
 func TestTargetFromInput_PrefersToolKey(t *testing.T) {
-	got := TargetFromInput("Bash", map[string]any{"command": "boo ls", "description": "list"})
-	if got != "boo ls" {
-		t.Fatalf("got %q, want %q", got, "boo ls")
+	got := TargetFromInput("Bash", map[string]any{"command": "asd ls", "description": "list"})
+	if got != "asd ls" {
+		t.Fatalf("got %q, want %q", got, "asd ls")
 	}
 }
 
@@ -86,8 +86,8 @@ func TestTargetFromInput_TruncatesTo60(t *testing.T) {
 func TestRequestOnProgressInvokable(t *testing.T) {
 	var got ProgressEvent
 	req := Request{OnProgress: func(ev ProgressEvent) { got = ev }}
-	req.OnProgress(ProgressEvent{Kind: "tool", Tool: "Bash", Target: "boo ls"})
-	if got.Tool != "Bash" || got.Target != "boo ls" {
+	req.OnProgress(ProgressEvent{Kind: "tool", Tool: "Bash", Target: "asd ls"})
+	if got.Tool != "Bash" || got.Target != "asd ls" {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -359,13 +359,13 @@ func markdownContent(t *testing.T, cardJSON string) string {
 
 func TestBuildProgressCard_InProgress(t *testing.T) {
 	st := traceState{
-		steps: []traceStep{{tool: "Bash", target: "boo ls"}, {tool: "Read", target: "api.go"}},
+		steps: []traceStep{{tool: "Bash", target: "asd ls"}, {tool: "Read", target: "api.go"}},
 	}
 	md := markdownContent(t, buildProgressCard(st))
 	if !strings.Contains(md, "处理中") {
 		t.Fatalf("missing in-progress header: %s", md)
 	}
-	if !strings.Contains(md, "🔧 Bash") || !strings.Contains(md, "boo ls") {
+	if !strings.Contains(md, "🔧 Bash") || !strings.Contains(md, "asd ls") {
 		t.Fatalf("missing bash step: %s", md)
 	}
 	if !strings.Contains(md, "📖 Read") {
@@ -375,7 +375,7 @@ func TestBuildProgressCard_InProgress(t *testing.T) {
 
 func TestBuildProgressCard_Done(t *testing.T) {
 	st := traceState{
-		steps:    []traceStep{{tool: "Bash", target: "boo ls"}},
+		steps:    []traceStep{{tool: "Bash", target: "asd ls"}},
 		terminal: "done",
 		elapsed:  26 * time.Second,
 	}
@@ -684,11 +684,11 @@ type Config struct {
 func LoadConfig() Config {
 	return Config{
 		Domain: getEnvOrDefault("FEISHU_DOMAIN", "https://open.feishu.cn"),
-		Trace:  envBoolDefaultTrue("CHANNEL_FEISHU_TRACE"),
+		Trace:  envAsdlDefaultTrue("CHANNEL_FEISHU_TRACE"),
 	}
 }
 
-func envBoolDefaultTrue(key string) bool {
+func envAsdlDefaultTrue(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
 	case "0", "false", "off", "no":
 		return false
@@ -758,7 +758,7 @@ func newTestSession(api feishuAPI) *traceSession {
 func TestTraceSession_StepsThenDoneSendsFinalFrame(t *testing.T) {
 	api := &fakeTraceAPI{}
 	s := newTestSession(api)
-	s.Step(context.Background(), agentEvent("Bash", "boo ls"))
+	s.Step(context.Background(), agentEvent("Bash", "asd ls"))
 	s.Step(context.Background(), agentEvent("Read", "api.go"))
 	s.Done(context.Background())
 
@@ -1154,7 +1154,7 @@ func TestOrchestrator_PlainBot_WiresProgressOnSuccess(t *testing.T) {
 	}}
 	exec := &fakeExecutor{send: func(_ context.Context, _ string, _ agent.Spec, req agent.Request) (agent.Response, error) {
 		if req.OnProgress != nil {
-			req.OnProgress(agent.ProgressEvent{Kind: "tool", Tool: "Bash", Target: "boo ls"})
+			req.OnProgress(agent.ProgressEvent{Kind: "tool", Tool: "Bash", Target: "asd ls"})
 		}
 		return agent.Response{Text: "ok"}, nil
 	}}
@@ -1491,7 +1491,7 @@ func TestReadLoop_EmitsToolUseProgress(t *testing.T) {
 
 	line := `{"type":"assistant","message":{"content":[` +
 		`{"type":"text","text":"working"},` +
-		`{"type":"tool_use","name":"Bash","input":{"command":"boo ls"}},` +
+		`{"type":"tool_use","name":"Bash","input":{"command":"asd ls"}},` +
 		`{"type":"tool_use","name":"Read","input":{"file_path":"internal/api.go"}}]}}`
 
 	r.handleLine(line) // see Step 3
@@ -1501,7 +1501,7 @@ func TestReadLoop_EmitsToolUseProgress(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d events, want 2: %+v", len(got), got)
 	}
-	if got[0].Tool != "Bash" || got[0].Target != "boo ls" {
+	if got[0].Tool != "Bash" || got[0].Target != "asd ls" {
 		t.Fatalf("event0 = %+v", got[0])
 	}
 	if got[1].Tool != "Read" || got[1].Target != "internal/api.go" {
@@ -1668,12 +1668,12 @@ func TestHandleItemStarted_EmitsToolProgress(t *testing.T) {
 	}}
 
 	// Confirmed shape from captured sample (EDIT to match real codex output):
-	params := json.RawMessage(`{"threadId":"","item":{"type":"commandExecution","command":"boo ls"}}`)
+	params := json.RawMessage(`{"threadId":"","item":{"type":"commandExecution","command":"asd ls"}}`)
 	r.handleItemStarted(params)
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 1 || got[0].Tool != "Bash" || got[0].Target != "boo ls" {
+	if len(got) != 1 || got[0].Tool != "Bash" || got[0].Target != "asd ls" {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -1819,12 +1819,12 @@ func TestHandleSessionUpdate_EmitsToolProgress(t *testing.T) {
 	}}
 
 	// Confirmed shape from captured sample (EDIT to match real opencode output):
-	params := json.RawMessage(`{"sessionId":"s","update":{"sessionUpdate":"tool_call","kind":"Bash","rawInput":{"command":"boo ls"}}}`)
+	params := json.RawMessage(`{"sessionId":"s","update":{"sessionUpdate":"tool_call","kind":"Bash","rawInput":{"command":"asd ls"}}}`)
 	r.handleSessionUpdate(params)
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 1 || got[0].Tool != "Bash" || got[0].Target != "boo ls" {
+	if len(got) != 1 || got[0].Tool != "Bash" || got[0].Target != "asd ls" {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -1907,7 +1907,7 @@ Expected: builds clean.
 - [ ] **Step 3: Manual smoke (optional, needs a real Feishu bot)**
 
 With a Feishu bot connected, send it a prompt that triggers tool use (e.g. a
-claude bot asked to run `boo ls`). Expected on Feishu: a "🤖 处理中…" card that
+claude bot asked to run `asd ls`). Expected on Feishu: a "🤖 处理中…" card that
 fills with 🔧/📖/✏️ step lines, finalizes to "✅ 完成 · N 步 · Ns", then a
 separate answer message (markdown card for rich answers). Then set
 `CHANNEL_FEISHU_TRACE=0`, restart, and confirm the trace card disappears and the

@@ -72,7 +72,7 @@ func TestOrchestrator_PlainBot_WiresProgressOnSuccess(t *testing.T) {
 	}}
 	exec := &fakeExecutor{send: func(_ context.Context, _ string, _ agent.Spec, req agent.Request) (agent.Response, error) {
 		if req.OnProgress != nil {
-			req.OnProgress(agent.ProgressEvent{Kind: "tool", Tool: "Bash", Target: "boo ls"})
+			req.OnProgress(agent.ProgressEvent{Kind: "tool", Tool: "Bash", Target: "asd list"})
 		}
 		return agent.Response{Text: "ok"}, nil
 	}}

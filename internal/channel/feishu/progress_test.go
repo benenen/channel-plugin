@@ -30,13 +30,13 @@ func markdownContent(t *testing.T, cardJSON string) string {
 
 func TestBuildProgressCard_InProgress(t *testing.T) {
 	st := traceState{
-		steps: []traceStep{{tool: "Bash", target: "boo ls"}, {tool: "Read", target: "api.go"}},
+		steps: []traceStep{{tool: "Bash", target: "asd list"}, {tool: "Read", target: "api.go"}},
 	}
 	md := markdownContent(t, buildProgressCard(st))
 	if !strings.Contains(md, "处理中") {
 		t.Fatalf("missing in-progress header: %s", md)
 	}
-	if !strings.Contains(md, "🔧 Bash") || !strings.Contains(md, "boo ls") {
+	if !strings.Contains(md, "🔧 Bash") || !strings.Contains(md, "asd list") {
 		t.Fatalf("missing bash step: %s", md)
 	}
 	if !strings.Contains(md, "📖 Read") {
@@ -46,7 +46,7 @@ func TestBuildProgressCard_InProgress(t *testing.T) {
 
 func TestBuildProgressCard_Done(t *testing.T) {
 	st := traceState{
-		steps:    []traceStep{{tool: "Bash", target: "boo ls"}},
+		steps:    []traceStep{{tool: "Bash", target: "asd list"}},
 		terminal: "done",
 		elapsed:  26 * time.Second,
 	}
@@ -150,7 +150,7 @@ func agentEvent(tool, target string) agent.ProgressEvent {
 func TestTraceSession_StepsThenDoneSendsFinalFrame(t *testing.T) {
 	api := &fakeTraceAPI{}
 	s := newTestSession(api)
-	s.Step(context.Background(), agentEvent("Bash", "boo ls"))
+	s.Step(context.Background(), agentEvent("Bash", "asd list"))
 	s.Step(context.Background(), agentEvent("Read", "api.go"))
 	s.Done(context.Background())
 

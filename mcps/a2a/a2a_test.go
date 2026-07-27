@@ -4,29 +4,94 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-// stubBoo swaps runBoo for tests; returns a restore func.
-func stubBoo(fn func(args ...string) ([]byte, int, error)) func() {
-	prev := runBoo
-	runBoo = func(_ context.Context, args ...string) ([]byte, int, error) { return fn(args...) }
-	return func() { runBoo = prev }
+// stubAsd swaps runAsd for tests that don't care about stderr; returns a restore func.
+func stubAsd(fn func(args ...string) ([]byte, int, error)) func() {
+	return stubAsdFull(func(args ...string) ([]byte, []byte, int, error) {
+		out, code, err := fn(args...)
+		return out, nil, code, err
+	})
+}
+
+// stubAsdFull swaps runAsd for a fake that also controls stderr.
+func stubAsdFull(fn func(args ...string) ([]byte, []byte, int, error)) func() {
+	prev := runAsd
+	runAsd = func(_ context.Context, args ...string) ([]byte, []byte, int, error) { return fn(args...) }
+	return func() { runAsd = prev }
+}
+
+// stubProcCwd swaps the /proc cwd lookup; returns a restore func.
+func stubProcCwd(fn func(pid int) (string, bool)) func() {
+	prev := procCwd
+	procCwd = fn
+	return func() { procCwd = prev }
+}
+
+// asdSessionRow is one session in the fake CLI's roster.
+type asdSessionRow struct {
+	name, title string
+	idleMs      int64
+}
+
+// fakeAsdCLI mimics the real asd CLI: `list` renders the table (no JSON mode),
+// `inspect --json` returns one session's detail.
+func fakeAsdCLI(rows ...asdSessionRow) func(args ...string) ([]byte, int, error) {
+	return func(args ...string) ([]byte, int, error) {
+		switch args[0] {
+		case "list":
+			var b strings.Builder
+			b.WriteString("NAME                 SIZE   STATUS  CLIENTS      CREATED  COMMAND\n")
+			for _, r := range rows {
+				fmt.Fprintf(&b, "%-18s 80x24     idle        0       1d ago  bash\n", r.name)
+			}
+			return []byte(b.String()), 0, nil
+		case "inspect":
+			for _, r := range rows {
+				if r.name == args[1] {
+					return []byte(fmt.Sprintf(`{"session":%q,"title":%q,"idle_ms":%d}`, r.name, r.title, r.idleMs)), 0, nil
+				}
+			}
+			return nil, 1, nil
+		}
+		return nil, 0, nil
+	}
+}
+
+// useSessionList points asd's data dir at a temp dir holding a sessions.tsv
+// built from the given name→cwd entries.
+func useSessionList(t *testing.T, entries map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "asd"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	for name, cwd := range entries {
+		fmt.Fprintf(&b, "%s\t%s\n", name, cwd)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "asd", "sessions.tsv"), []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestLoadSources(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "c.json")
-	os.WriteFile(p, []byte(`[{"kind":"http","name":"w","endpoint":"http://x","auth_token":"sek"},{"kind":"boo"},{"name":"noKind","endpoint":"http://y"}]`), 0o600)
+	os.WriteFile(p, []byte(`[{"kind":"http","name":"w","endpoint":"http://x","auth_token":"sek"},{"kind":"asd"},{"name":"noKind","endpoint":"http://y"}]`), 0o600)
 	src, err := loadSources(p)
 	if err != nil || len(src) != 3 {
 		t.Fatalf("sources: %+v err %v", src, err)
 	}
-	if src[0].kind() != "http" || src[1].kind() != "boo" || src[2].kind() != "http" {
+	if src[0].kind() != "http" || src[1].kind() != "asd" || src[2].kind() != "http" {
 		t.Fatalf("kinds: %q %q %q", src[0].kind(), src[1].kind(), src[2].kind())
 	}
 }
@@ -40,6 +105,19 @@ func TestLoadSourcesEmptyAndMissing(t *testing.T) {
 	}
 }
 
+func TestParseSessionNames(t *testing.T) {
+	table := "NAME                 SIZE   STATUS  CLIENTS      CREATED  COMMAND\n" +
+		"build              181x55  running        2       1d ago  make -j\n" +
+		"chat               163x45     idle        0       2d ago  claude\n"
+	if got := parseSessionNames([]byte(table)); len(got) != 2 || got[0] != "build" || got[1] != "chat" {
+		t.Fatalf("got %v", got)
+	}
+	// An empty daemon prints "no sessions" — not a session row.
+	if got := parseSessionNames([]byte("no sessions\n")); len(got) != 0 {
+		t.Fatalf("want none, got %v", got)
+	}
+}
+
 func TestResolveHTTPPassthrough(t *testing.T) {
 	got := resolve(context.Background(), []Source{{Kind: "http", Name: "w", Description: "d", Endpoint: "e", AuthToken: "t"}})
 	if len(got) != 1 || got[0].Kind != "http" || got[0].Endpoint != "e" || got[0].AuthToken != "t" {
@@ -47,25 +125,26 @@ func TestResolveHTTPPassthrough(t *testing.T) {
 	}
 }
 
-func TestResolveBooExpandsSessions(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		// expect ["ls","--json"]
-		return []byte(`[{"name":"build","title":"a build"},{"name":"chat","title":"a chat"}]`), 0, nil
-	})()
-	got := resolve(context.Background(), []Source{{Kind: "boo", WaitTimeout: "30s"}})
+func TestResolveAsdExpandsSessions(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // no sessions.tsv → description falls back to title
+	defer stubAsd(fakeAsdCLI(
+		asdSessionRow{name: "build", title: "a build"},
+		asdSessionRow{name: "chat", title: "a chat"},
+	))()
+	got := resolve(context.Background(), []Source{{Kind: "asd", WaitTimeout: "30s"}})
 	if len(got) != 2 {
-		t.Fatalf("want 2 boo servers, got %+v", got)
+		t.Fatalf("want 2 asd servers, got %+v", got)
 	}
-	if got[0].Kind != "boo" || got[0].Name != "build" || got[0].Session != "build" || got[0].Description != "a build" || got[0].WaitTimeout != "30s" {
-		t.Fatalf("boo[0]: %+v", got[0])
+	if got[0].Kind != "asd" || got[0].Name != "build" || got[0].Session != "build" || got[0].Description != "a build" || got[0].WaitTimeout != "30s" {
+		t.Fatalf("asd[0]: %+v", got[0])
 	}
 }
 
-func TestResolveBooFailureKeepsHTTP(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) { return nil, 1, nil })() // boo ls fails
-	got := resolve(context.Background(), []Source{{Kind: "http", Name: "w", Endpoint: "e"}, {Kind: "boo"}})
+func TestResolveAsdFailureKeepsHTTP(t *testing.T) {
+	defer stubAsd(func(args ...string) ([]byte, int, error) { return nil, 1, nil })() // asd list fails
+	got := resolve(context.Background(), []Source{{Kind: "http", Name: "w", Endpoint: "e"}, {Kind: "asd"}})
 	if len(got) != 1 || got[0].Name != "w" {
-		t.Fatalf("boo failure should leave only http, got %+v", got)
+		t.Fatalf("asd failure should leave only http, got %+v", got)
 	}
 }
 
@@ -109,11 +188,11 @@ func TestRunDispatchEmptyPrompt(t *testing.T) {
 	}
 }
 
-func TestDispatchBooDelta(t *testing.T) {
+func TestDispatchAsdDelta(t *testing.T) {
 	before := "line1\nline2\n"                                // 2 history lines before
 	after := "line1\nline2\necho hello\nhi there\nuser@h:~$ " // prompt echo + answer + shell prompt
 	calls := 0
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
+	defer stubAsd(func(args ...string) ([]byte, int, error) {
 		calls++
 		switch args[0] {
 		case "peek":
@@ -126,7 +205,7 @@ func TestDispatchBooDelta(t *testing.T) {
 		}
 		return nil, 0, nil
 	})()
-	got, err := dispatchBoo(context.Background(), "build", "echo hello", "30s")
+	got, err := dispatchAsd(context.Background(), "build", "echo hello", "30s")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,16 +214,20 @@ func TestDispatchBooDelta(t *testing.T) {
 	}
 }
 
-func TestDispatchBooSessionMissing(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) { return nil, 3, nil })() // exit 3
-	if _, err := dispatchBoo(context.Background(), "ghost", "hi", "5s"); err == nil {
-		t.Fatal("expected session-not-running error")
+// asd reports a missing session as exit 1 + a stderr message, not a distinct code.
+func TestDispatchAsdSessionMissing(t *testing.T) {
+	defer stubAsdFull(func(args ...string) ([]byte, []byte, int, error) {
+		return nil, []byte("Error: peek failed (2): no such session 'ghost'"), 1, nil
+	})()
+	_, err := dispatchAsd(context.Background(), "ghost", "hi", "5s")
+	if err == nil || !strings.Contains(err.Error(), "not running") {
+		t.Fatalf("want session-not-running error, got %v", err)
 	}
 }
 
-func TestDispatchBooTimeoutStillReturns(t *testing.T) {
+func TestDispatchAsdTimeoutStillReturns(t *testing.T) {
 	calls := 0
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
+	defer stubAsd(func(args ...string) ([]byte, int, error) {
 		calls++
 		switch args[0] {
 		case "peek":
@@ -157,7 +240,7 @@ func TestDispatchBooTimeoutStillReturns(t *testing.T) {
 		}
 		return nil, 0, nil
 	})()
-	got, err := dispatchBoo(context.Background(), "build", "x", "1s")
+	got, err := dispatchAsd(context.Background(), "build", "x", "1s")
 	if err != nil {
 		t.Fatalf("timeout should not error: %v", err)
 	}
@@ -166,24 +249,26 @@ func TestDispatchBooTimeoutStillReturns(t *testing.T) {
 	}
 }
 
-func TestRunDispatchRoutesBoo(t *testing.T) {
-	calls := 0
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		calls++
-		if args[0] == "ls" {
-			return []byte(`[{"name":"build","title":"t"}]`), 0, nil
-		}
-		if args[0] == "peek" {
-			if calls <= 2 { // ls then first peek
+func TestRunDispatchRoutesAsd(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	cli := fakeAsdCLI(asdSessionRow{name: "build", title: "t"})
+	peeks := 0
+	defer stubAsd(func(args ...string) ([]byte, int, error) {
+		switch args[0] {
+		case "peek":
+			peeks++
+			if peeks == 1 {
 				return []byte("a\n"), 0, nil
 			}
 			return []byte("a\nprompt\nresult-text\n"), 0, nil
+		case "send", "wait":
+			return nil, 0, nil
 		}
-		return nil, 0, nil
+		return cli(args...)
 	})()
-	out, err := runDispatch(context.Background(), []Source{{Kind: "boo"}}, newA2AClient(nil), DispatchInput{AgentName: "build", Prompt: "prompt"})
+	out, err := runDispatch(context.Background(), []Source{{Kind: "asd"}}, newA2AClient(nil), DispatchInput{AgentName: "build", Prompt: "prompt"})
 	if err != nil || out.Result == "" {
-		t.Fatalf("boo route: out=%+v err=%v", out, err)
+		t.Fatalf("asd route: out=%+v err=%v", out, err)
 	}
 }
 
@@ -233,180 +318,223 @@ func TestRunDispatchNon2xx(t *testing.T) {
 	}
 }
 
-func TestBooConfigDir(t *testing.T) {
-	t.Setenv("BOO_CONFIG", "/x/conf.toml")
-	t.Setenv("XDG_CONFIG_HOME", "/y")
-	if d := booConfigDir(); d != "/x" {
-		t.Fatalf("BOO_CONFIG dir = %q, want /x", d)
+// asd keeps its persisted session list in the XDG data dir, not the config dir.
+func TestAsdDataDir(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/y")
+	if d := asdDataDir(); d != "/y/asd" {
+		t.Fatalf("XDG dir = %q, want /y/asd", d)
 	}
-	t.Setenv("BOO_CONFIG", "")
-	if d := booConfigDir(); d != "/y/boo" {
-		t.Fatalf("XDG dir = %q, want /y/boo", d)
-	}
-	// Home fallback: both BOO_CONFIG and XDG_CONFIG_HOME unset.
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".config", "boo")
-	if d := booConfigDir(); d != want {
+	want := filepath.Join(home, ".local", "share", "asd")
+	if d := asdDataDir(); d != want {
 		t.Fatalf("home fallback = %q, want %q", d, want)
 	}
 }
 
-func TestBooSessionCwd(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	os.MkdirAll(filepath.Join(tmp, "boo"), 0o755)
-	os.WriteFile(filepath.Join(tmp, "boo", "build.state"), []byte("/home/me/proj\n"), 0o600)
+func TestAsdSessionCwd(t *testing.T) {
+	useSessionList(t, map[string]string{"build": "/home/me/proj"})
 
-	cwd, ok := booSessionCwd("build")
+	cwd, ok := asdSessionCwd("build")
 	if !ok || cwd != "/home/me/proj" {
 		t.Fatalf("cwd=%q ok=%v", cwd, ok)
 	}
-	if _, ok := booSessionCwd("ghost"); ok {
-		t.Fatal("missing .state should be !ok")
+	if _, ok := asdSessionCwd("ghost"); ok {
+		t.Fatal("session absent from the list should be !ok")
 	}
 }
 
-func TestBooCapabilitiesDescription(t *testing.T) {
+// The daemon writes an empty cwd field when it cannot read the session's cwd.
+func TestAsdSessionCwdEmptyFieldIsNotOk(t *testing.T) {
+	useSessionList(t, map[string]string{"build": ""})
+	if _, ok := asdSessionCwd("build"); ok {
+		t.Fatal("empty cwd should be !ok")
+	}
+}
+
+func TestAsdSessionCwdMissingFile(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // no sessions.tsv at all
+	if _, ok := asdSessionCwd("build"); ok {
+		t.Fatal("missing sessions.tsv should be !ok")
+	}
+}
+
+// The daemon samples a session's cwd when it writes sessions.tsv — for a
+// session created as `cd <dir> && exec ...` that snapshot predates the cd and
+// is wrong. The live cwd of the session's pid wins when it is readable.
+func TestSessionCwdPrefersLivePidOverSessionList(t *testing.T) {
+	useSessionList(t, map[string]string{"build": "/stale/snapshot"})
+	defer stubProcCwd(func(pid int) (string, bool) {
+		if pid == 4242 {
+			return "/live/dir", true
+		}
+		return "", false
+	})()
+	if cwd, ok := sessionCwd(asdSession{Name: "build", Pid: 4242}); !ok || cwd != "/live/dir" {
+		t.Fatalf("cwd=%q ok=%v, want /live/dir", cwd, ok)
+	}
+}
+
+func TestSessionCwdFallsBackToSessionList(t *testing.T) {
+	useSessionList(t, map[string]string{"build": "/from/list"})
+	defer stubProcCwd(func(int) (string, bool) { return "", false })()
+	if cwd, ok := sessionCwd(asdSession{Name: "build", Pid: 4242}); !ok || cwd != "/from/list" {
+		t.Fatalf("cwd=%q ok=%v, want /from/list", cwd, ok)
+	}
+}
+
+func TestSessionCwdUnknownIsNotOk(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	defer stubProcCwd(func(int) (string, bool) { return "", false })()
+	if _, ok := sessionCwd(asdSession{Name: "build"}); ok {
+		t.Fatal("no live pid and no session list should be !ok")
+	}
+}
+
+// procCwd reads a real process's cwd through /proc.
+func TestProcCwdReadsOwnProcess(t *testing.T) {
+	want, err := os.Getwd()
+	if err != nil {
+		t.Skip(err)
+	}
+	got, ok := procCwd(os.Getpid())
+	if !ok || got != want {
+		t.Fatalf("procCwd(self) = %q ok=%v, want %q", got, ok, want)
+	}
+	if _, ok := procCwd(0); ok {
+		t.Fatal("pid 0 must be !ok")
+	}
+}
+
+func TestAsdCapabilitiesDescription(t *testing.T) {
 	cwd := t.TempDir()
-	os.WriteFile(filepath.Join(cwd, "boo.capabilities.json"),
+	os.WriteFile(filepath.Join(cwd, "asd.capabilities.json"),
 		[]byte(`{"description":"coding agent","skills":["go","testing"]}`), 0o600)
-	got, ok := booCapabilitiesDescription(cwd)
+	got, ok := asdCapabilitiesDescription(cwd)
 	if !ok || got != "coding agent [skills: go, testing]" {
 		t.Fatalf("got %q ok=%v", got, ok)
 	}
 
 	cwd2 := t.TempDir()
-	os.WriteFile(filepath.Join(cwd2, "boo.capabilities.json"), []byte(`{"description":"plain"}`), 0o600)
-	if got, ok := booCapabilitiesDescription(cwd2); !ok || got != "plain" {
+	os.WriteFile(filepath.Join(cwd2, "asd.capabilities.json"), []byte(`{"description":"plain"}`), 0o600)
+	if got, ok := asdCapabilitiesDescription(cwd2); !ok || got != "plain" {
 		t.Fatalf("plain: got %q ok=%v", got, ok)
 	}
 
-	if _, ok := booCapabilitiesDescription(t.TempDir()); ok {
+	if _, ok := asdCapabilitiesDescription(t.TempDir()); ok {
 		t.Fatal("missing file should be !ok")
 	}
 	bad := t.TempDir()
-	os.WriteFile(filepath.Join(bad, "boo.capabilities.json"), []byte(`{not json`), 0o600)
-	if _, ok := booCapabilitiesDescription(bad); ok {
+	os.WriteFile(filepath.Join(bad, "asd.capabilities.json"), []byte(`{not json`), 0o600)
+	if _, ok := asdCapabilitiesDescription(bad); ok {
 		t.Fatal("invalid json should be !ok")
 	}
 	// Empty object: present but no description/skills → ("", false).
 	empty := t.TempDir()
-	os.WriteFile(filepath.Join(empty, "boo.capabilities.json"), []byte(`{}`), 0o600)
-	if got, ok := booCapabilitiesDescription(empty); ok || got != "" {
+	os.WriteFile(filepath.Join(empty, "asd.capabilities.json"), []byte(`{}`), 0o600)
+	if got, ok := asdCapabilitiesDescription(empty); ok || got != "" {
 		t.Fatalf("empty object: got %q ok=%v, want (\"\", false)", got, ok)
 	}
 }
 
-func TestResolveBooEnrichesDescriptionFromCapabilities(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"bash"}]`), 0, nil
-	})()
-	tmp := t.TempDir()
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+func TestResolveAsdEnrichesDescriptionFromCapabilities(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "bash"}))()
 	cwd := t.TempDir()
-	os.MkdirAll(filepath.Join(tmp, "boo"), 0o755)
-	os.WriteFile(filepath.Join(tmp, "boo", "build.state"), []byte(cwd+"\n"), 0o600)
-	os.WriteFile(filepath.Join(cwd, "boo.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
+	useSessionList(t, map[string]string{"build": cwd})
+	os.WriteFile(filepath.Join(cwd, "asd.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
 
-	got := resolve(context.Background(), []Source{{Kind: "boo"}})
+	got := resolve(context.Background(), []Source{{Kind: "asd"}})
 	if len(got) != 1 || got[0].Description != "go coder" {
 		t.Fatalf("enriched: %+v", got)
 	}
 }
 
-func TestResolveBooFallsBackToTitleWhenNoCapabilities(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"the title"}]`), 0, nil
-	})()
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // empty boo dir → no .state
-	got := resolve(context.Background(), []Source{{Kind: "boo"}})
+func TestResolveAsdFallsBackToTitleWhenNoCapabilities(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "the title"}))()
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // no sessions.tsv → no cwd
+	got := resolve(context.Background(), []Source{{Kind: "asd"}})
 	if len(got) != 1 || got[0].Description != "the title" {
 		t.Fatalf("fallback: %+v", got)
 	}
 }
 
-func TestBooRosterParsesSessions(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"a build","idle_ms":1200},{"name":"chat","title":"a chat","idle_ms":50}]`), 0, nil
-	})()
-	got := booRoster(context.Background())
+func TestAsdRosterParsesSessions(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(
+		asdSessionRow{name: "build", title: "a build", idleMs: 1200},
+		asdSessionRow{name: "chat", title: "a chat", idleMs: 50},
+	))()
+	got := asdRoster(context.Background())
 	if len(got) != 2 || got[0].Name != "build" || got[0].Title != "a build" || got[0].IdleMS != 1200 {
 		t.Fatalf("roster: %+v", got)
 	}
 }
 
-func TestBooRosterEmptyOnFailure(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) { return nil, 1, nil })()
-	if got := booRoster(context.Background()); got == nil || len(got) != 0 {
-		t.Fatalf("want non-nil empty on ls failure, got %#v", got)
+func TestAsdRosterEmptyOnFailure(t *testing.T) {
+	restore := stubAsd(func(args ...string) ([]byte, int, error) { return nil, 1, nil })
+	if got := asdRoster(context.Background()); got == nil || len(got) != 0 {
+		t.Fatalf("want non-nil empty on list failure, got %#v", got)
 	}
-	defer stubBoo(func(args ...string) ([]byte, int, error) { return []byte(`{bad`), 0, nil })()
-	if got := booRoster(context.Background()); got == nil || len(got) != 0 {
-		t.Fatalf("want non-nil empty on bad json, got %#v", got)
-	}
-	defer stubBoo(func(args ...string) ([]byte, int, error) { return nil, 0, errors.New("exec fail") })()
-	if got := booRoster(context.Background()); got == nil || len(got) != 0 {
+	restore()
+
+	restore = stubAsd(func(args ...string) ([]byte, int, error) { return nil, 0, errors.New("exec fail") })
+	if got := asdRoster(context.Background()); got == nil || len(got) != 0 {
 		t.Fatalf("want non-nil empty on exec error, got %#v", got)
+	}
+	restore()
+}
+
+// A session that dies between `list` and `inspect` is dropped, not fatal.
+func TestAsdRosterSkipsSessionsThatVanish(t *testing.T) {
+	defer stubAsd(func(args ...string) ([]byte, int, error) {
+		if args[0] == "list" {
+			return fakeAsdCLI(asdSessionRow{name: "build"}, asdSessionRow{name: "chat", title: "a chat"})(args...)
+		}
+		if args[1] == "build" {
+			return nil, 1, nil
+		}
+		return []byte(`{"session":"chat","title":"a chat"}`), 0, nil
+	})()
+	got := asdRoster(context.Background())
+	if len(got) != 1 || got[0].Name != "chat" {
+		t.Fatalf("roster: %+v", got)
 	}
 }
 
-func TestBooSessionDetailLiveWithCapability(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"a build","idle_ms":7}]`), 0, nil
-	})()
-	tmp := t.TempDir()
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+func TestAsdSessionDetailLiveWithCapability(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "a build", idleMs: 7}))()
 	cwd := t.TempDir()
-	os.MkdirAll(filepath.Join(tmp, "boo"), 0o755)
-	os.WriteFile(filepath.Join(tmp, "boo", "build.state"), []byte(cwd+"\n"), 0o600)
-	os.WriteFile(filepath.Join(cwd, "boo.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
+	useSessionList(t, map[string]string{"build": cwd})
+	os.WriteFile(filepath.Join(cwd, "asd.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
 
-	d, ok := booSessionDetail(context.Background(), "build")
+	d, ok := asdSessionDetail(context.Background(), "build")
 	if !ok || d.Name != "build" || d.Title != "a build" || d.IdleMS != 7 || d.Cwd != cwd || d.Capability != "go coder" {
 		t.Fatalf("detail: %+v ok=%v", d, ok)
 	}
 }
 
-func TestBooSessionDetailUnknownIsNotOk(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"a build"}]`), 0, nil
-	})()
-	if _, ok := booSessionDetail(context.Background(), "ghost"); ok {
+func TestAsdSessionDetailUnknownIsNotOk(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "a build"}))()
+	if _, ok := asdSessionDetail(context.Background(), "ghost"); ok {
 		t.Fatal("unknown session must be !ok")
 	}
 }
 
-func TestBooSessionDetailLiveNoCapability(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"a build"}]`), 0, nil
-	})()
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // empty boo dir → no .state
-	d, ok := booSessionDetail(context.Background(), "build")
+func TestAsdSessionDetailLiveNoCapability(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "a build"}))()
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // no sessions.tsv → no cwd
+	d, ok := asdSessionDetail(context.Background(), "build")
 	if !ok || d.Capability != "" || d.Cwd != "" {
 		t.Fatalf("detail: %+v ok=%v (want ok, empty cap/cwd)", d, ok)
 	}
 }
 
-func TestBooRosterDetailedEnrichesCapability(t *testing.T) {
-	defer stubBoo(func(args ...string) ([]byte, int, error) {
-		return []byte(`[{"name":"build","title":"a build","idle_ms":5}]`), 0, nil
-	})()
-	tmp := t.TempDir()
-	t.Setenv("BOO_CONFIG", "")
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+func TestAsdRosterDetailedEnrichesCapability(t *testing.T) {
+	defer stubAsd(fakeAsdCLI(asdSessionRow{name: "build", title: "a build", idleMs: 5}))()
 	cwd := t.TempDir()
-	os.MkdirAll(filepath.Join(tmp, "boo"), 0o755)
-	os.WriteFile(filepath.Join(tmp, "boo", "build.state"), []byte(cwd+"\n"), 0o600)
-	os.WriteFile(filepath.Join(cwd, "boo.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
+	useSessionList(t, map[string]string{"build": cwd})
+	os.WriteFile(filepath.Join(cwd, "asd.capabilities.json"), []byte(`{"description":"go coder"}`), 0o600)
 
-	got := booRosterDetailed(context.Background())
+	got := asdRosterDetailed(context.Background())
 	if len(got) != 1 || got[0].Name != "build" || got[0].Capability != "go coder" || got[0].Cwd != cwd {
 		t.Fatalf("detailed roster: %+v", got)
 	}

@@ -1092,7 +1092,7 @@ git commit -m "feat(cmd): myclaw mcp command with attach/detach"
 
 ---
 
-## Task 9: Bootstrap + main wiring
+## Task 9: Asdtstrap + main wiring
 
 **Files:**
 - Modify: `internal/bootstrap/bootstrap.go`
@@ -1219,7 +1219,7 @@ git commit -m "feat(web): attach MCP servers to a bot in the agent-config card"
 - API `mcp_server_ids` + `GET /api/v1/mcp-servers` → Task 7. ✓
 - Web multi-select → Task 10. ✓
 - Cleanups: no `config.go` (never created), no leftover comment (Task 8 note), friendly dup-name (Task 5). ✓
-- Bootstrap wiring → Task 9. ✓
+- Asdtstrap wiring → Task 9. ✓
 
 **Placeholder scan:** Implementation steps carry real code. Tasks 7/8/10 contain deliberate "match the existing harness" notes rather than full reproductions of large existing files — the worker must read the sibling code; the new code is fully specified.
 

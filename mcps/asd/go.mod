@@ -1,4 +1,4 @@
-module github.com/benenen/myclaw/mcps/boo
+module github.com/benenen/myclaw/mcps/asd
 
 go 1.23.6
 

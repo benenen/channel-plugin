@@ -183,7 +183,7 @@ expects schema version **8**.
 - `ListBots`: populate each item's `MCPServerIDs` from `ListByBot`.
 - New `ListMCPServers(ctx)` → `[]MCPServerListItem` for the new endpoint.
 
-### 9. Bootstrap (`internal/bootstrap/bootstrap.go`)
+### 9. Asdtstrap (`internal/bootstrap/bootstrap.go`)
 - `mcpServerRepo := repositories.NewMCPServerRepository(db)`.
 - Pass `mcpServerRepo` into `NewBotService(...)`.
 - `resolver.SetMCPServerRepository(mcpServerRepo)`.

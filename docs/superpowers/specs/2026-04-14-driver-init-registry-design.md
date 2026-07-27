@@ -135,8 +135,8 @@ Even though oneshot has no persistent subprocess, `Init` is still useful to:
 - validate config once
 - preserve a uniform lifecycle across all drivers
 
-### 5. Bootstrap responsibility
-Bootstrap remains the composition point.
+### 5. Asdtstrap responsibility
+Asdtstrap remains the composition point.
 
 Current bootstrap should continue to build a single `agent.Spec` from config. The important change is that bootstrap no longer injects a concrete driver into `agent.Manager`; instead it just constructs the spec with a valid `Type`.
 
@@ -163,7 +163,7 @@ type SpecResolver interface {
 That can be added later without changing the driver contract.
 
 ## Data Flow
-1. Bootstrap builds `agent.Spec{Type: "oneshot", ...}`.
+1. Asdtstrap builds `agent.Spec{Type: "oneshot", ...}`.
 2. Orchestrator asks manager to send a request for `botID`.
 3. Manager checks for an existing session.
 4. If none exists, or the session is broken, or spec changed:

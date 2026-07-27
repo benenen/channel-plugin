@@ -261,7 +261,7 @@ func TestReadLoop_EmitsToolUseProgress(t *testing.T) {
 
 	line := `{"type":"assistant","message":{"content":[` +
 		`{"type":"text","text":"working"},` +
-		`{"type":"tool_use","name":"Bash","input":{"command":"boo ls"}},` +
+		`{"type":"tool_use","name":"Bash","input":{"command":"asd list"}},` +
 		`{"type":"tool_use","name":"Read","input":{"file_path":"internal/api.go"}}]}}`
 
 	r.handleLine(line)
@@ -271,7 +271,7 @@ func TestReadLoop_EmitsToolUseProgress(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d events, want 2: %+v", len(got), got)
 	}
-	if got[0].Tool != "Bash" || got[0].Target != "boo ls" {
+	if got[0].Tool != "Bash" || got[0].Target != "asd list" {
 		t.Fatalf("event0 = %+v", got[0])
 	}
 	if got[1].Tool != "Read" || got[1].Target != "internal/api.go" {

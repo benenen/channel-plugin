@@ -509,7 +509,7 @@ git commit -m "feat: persist CLI session id after each turn"
 
 ---
 
-## Task 7: Bootstrap wiring
+## Task 7: Asdtstrap wiring
 
 **Files:** Modify `internal/bootstrap/bootstrap.go`.
 

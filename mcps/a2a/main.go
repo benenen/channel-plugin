@@ -24,7 +24,7 @@ func main() {
 	client := newA2AClient(http.DefaultClient)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "a2a", Version: "0.1.0"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "a2a_list", Description: "List the A2A servers (incl. live boo sessions) this agent can dispatch subtasks to."},
+	mcp.AddTool(server, &mcp.Tool{Name: "a2a_list", Description: "List the A2A servers (incl. live asd sessions) this agent can dispatch subtasks to."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ ListInput) (*mcp.CallToolResult, ListOutput, error) {
 			return nil, runList(resolve(ctx, sources)), nil
 		})
@@ -34,27 +34,27 @@ func main() {
 			return nil, out, err
 		})
 	server.AddResource(&mcp.Resource{
-		URI:         "boo://sessions",
-		Name:        "boo-sessions",
-		Title:       "Live boo sessions",
-		Description: "Live boo sessions you can route subtasks to, each with its capability. Read boo://session/<name> for one session's full detail.",
+		URI:         "asd://sessions",
+		Name:        "asd-sessions",
+		Title:       "Live asd sessions",
+		Description: "Live asd sessions you can route subtasks to, each with its capability. Read asd://session/<name> for one session's full detail.",
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		data, _ := json.Marshal(map[string]any{"sessions": booRosterDetailed(ctx)})
+		data, _ := json.Marshal(map[string]any{"sessions": asdRosterDetailed(ctx)})
 		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{
-			{URI: "boo://sessions", MIMEType: "application/json", Text: string(data)},
+			{URI: "asd://sessions", MIMEType: "application/json", Text: string(data)},
 		}}, nil
 	})
 
 	server.AddResourceTemplate(&mcp.ResourceTemplate{
-		URITemplate: "boo://session/{name}",
-		Name:        "boo-session",
-		Title:       "boo session detail",
-		Description: "Capabilities + live status of one boo session.",
+		URITemplate: "asd://session/{name}",
+		Name:        "asd-session",
+		Title:       "asd session detail",
+		Description: "Capabilities + live status of one asd session.",
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		name := strings.TrimPrefix(req.Params.URI, "boo://session/")
-		detail, ok := booSessionDetail(ctx, name)
+		name := strings.TrimPrefix(req.Params.URI, "asd://session/")
+		detail, ok := asdSessionDetail(ctx, name)
 		if !ok {
 			return nil, mcp.ResourceNotFoundError(req.Params.URI)
 		}

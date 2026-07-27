@@ -1359,7 +1359,7 @@ git commit -m "feat: add feishu SDK adapters for credential validation, send, an
 
 ---
 
-## Task 7: Bootstrap wiring
+## Task 7: Asdtstrap wiring
 
 **Files:**
 - Modify: `internal/bootstrap/bootstrap.go` (imports ~line 18; provider construction ~70-89)

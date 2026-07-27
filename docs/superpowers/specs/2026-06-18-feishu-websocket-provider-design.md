@@ -67,7 +67,7 @@ The SDK reconnects internally. State mapping into the existing bot status machin
 - ctx cancel / `Stop` → `ch.Stop` → `RuntimeStateStopped`
 - fatal `ch.Start` error → `RuntimeStateError`
 
-### 5. Bootstrap wiring (`internal/bootstrap/bootstrap.go`)
+### 5. Asdtstrap wiring (`internal/bootstrap/bootstrap.go`)
 ```go
 feishuRegistry := feishu.NewRegistry()
 feishuProvider := feishu.NewProvider(feishuRegistry, logger)

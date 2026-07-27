@@ -4,6 +4,6 @@ use (
 	.
 	./mcps/echo
 	./mcps/ping
-	./mcps/boo
+	./mcps/asd
 	./mcps/a2a
 )

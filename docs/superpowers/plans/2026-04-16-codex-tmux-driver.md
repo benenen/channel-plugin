@@ -114,7 +114,7 @@ git commit -m "feat: add codex tmux capability mode"
 - [ ] **Step 1: Write the failing bootstrap assertion for `codex-tmux`**
 
 ```go
-func TestBootstrapUsesRegisteredDriverTypeForBotCLI(t *testing.T) {
+func TestAsdtstrapUsesRegisteredDriverTypeForBotCLI(t *testing.T) {
 	if _, ok := agent.LookupDriver("codex-pty"); !ok {
 		t.Fatal("expected codex-pty driver registration for bootstrap wiring")
 	}
@@ -129,7 +129,7 @@ func TestBootstrapUsesRegisteredDriverTypeForBotCLI(t *testing.T) {
 
 - [ ] **Step 2: Run the focused bootstrap test to verify it fails**
 
-Run: `go test ./internal/bootstrap -run TestBootstrapUsesRegisteredDriverTypeForBotCLI`
+Run: `go test ./internal/bootstrap -run TestAsdtstrapUsesRegisteredDriverTypeForBotCLI`
 Expected: FAIL because no `codex-tmux` driver is registered yet
 
 - [ ] **Step 3: Leave the test in place and defer the implementation to the next task**
@@ -355,7 +355,7 @@ Use small helper methods for `waitUntilReady`, `waitRunCompletion`, `markBroken`
 
 - [ ] **Step 9: Re-run the focused tmux tests and bootstrap registration test**
 
-Run: `go test ./internal/agent/codex -run 'TestTMUXDriverRegistersCodexTMUX|TestTMUXDriverInitRejectsEmptyCommand|TestTMUXRuntimeRunSuccessfulSingleRequest' && go test ./internal/bootstrap -run TestBootstrapUsesRegisteredDriverTypeForBotCLI`
+Run: `go test ./internal/agent/codex -run 'TestTMUXDriverRegistersCodexTMUX|TestTMUXDriverInitRejectsEmptyCommand|TestTMUXRuntimeRunSuccessfulSingleRequest' && go test ./internal/bootstrap -run TestAsdtstrapUsesRegisteredDriverTypeForBotCLI`
 Expected: PASS
 
 - [ ] **Step 10: Commit the first working tmux runtime**

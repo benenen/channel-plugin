@@ -6,9 +6,9 @@ import (
 )
 
 func TestTargetFromInput_PrefersToolKey(t *testing.T) {
-	got := TargetFromInput("Bash", map[string]any{"command": "boo ls", "description": "list"})
-	if got != "boo ls" {
-		t.Fatalf("got %q, want %q", got, "boo ls")
+	got := TargetFromInput("Bash", map[string]any{"command": "asd list", "description": "list"})
+	if got != "asd list" {
+		t.Fatalf("got %q, want %q", got, "asd list")
 	}
 }
 
@@ -44,8 +44,8 @@ func TestTargetFromInput_KnownToolEmptyCanonicalReturnsEmpty(t *testing.T) {
 func TestRequestOnProgressInvokable(t *testing.T) {
 	var got ProgressEvent
 	req := Request{OnProgress: func(ev ProgressEvent) { got = ev }}
-	req.OnProgress(ProgressEvent{Kind: "tool", Tool: "Bash", Target: "boo ls"})
-	if got.Tool != "Bash" || got.Target != "boo ls" {
+	req.OnProgress(ProgressEvent{Kind: "tool", Tool: "Bash", Target: "asd list"})
+	if got.Tool != "Bash" || got.Target != "asd list" {
 		t.Fatalf("got %+v", got)
 	}
 }

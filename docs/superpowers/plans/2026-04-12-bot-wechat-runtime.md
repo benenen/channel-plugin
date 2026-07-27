@@ -966,7 +966,7 @@ git add internal/app/bot_connection_manager.go internal/app/bot_connection_manag
 Append to `internal/bootstrap/bootstrap_test.go`:
 
 ```go
-func TestBootstrapStartsRuntimeRestoreWithoutFailing(t *testing.T) {
+func TestAsdtstrapStartsRuntimeRestoreWithoutFailing(t *testing.T) {
 	key := make([]byte, 32)
 	rand.Read(key)
 	os.Setenv("CHANNEL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
@@ -992,7 +992,7 @@ func TestBootstrapStartsRuntimeRestoreWithoutFailing(t *testing.T) {
 
 Run:
 ```bash
-go test ./internal/bootstrap -run 'TestBootstrapStartsRuntimeRestoreWithoutFailing$'
+go test ./internal/bootstrap -run 'TestAsdtstrapStartsRuntimeRestoreWithoutFailing$'
 ```
 
 Expected: PASS baseline before restore code is added
@@ -1034,7 +1034,7 @@ If `ListWithAccounts` does not exist, add the exact repository method in repo/mo
 
 Run:
 ```bash
-go test ./internal/bootstrap -run 'TestBootstrap(BuildsDependencies|StartsRuntimeRestoreWithoutFailing)$'
+go test ./internal/bootstrap -run 'TestAsdtstrap(BuildsDependencies|StartsRuntimeRestoreWithoutFailing)$'
 ```
 
 Expected: PASS

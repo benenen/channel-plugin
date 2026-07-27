@@ -1,7 +1,7 @@
 # a2a-mcp Design — an MCP server for A2A sub-agent routing
 
 ## Goal
-A standalone MCP server project `mcps/a2a` (mirrors `mcps/echo|ping|boo`) that lets
+A standalone MCP server project `mcps/a2a` (mirrors `mcps/echo|ping|asd`) that lets
 the calling agent **list a configured set of A2A servers** and **dispatch a
 self-contained subtask to a chosen one** (agent-to-agent delegation), returning
 the result synchronously. The registry of A2A servers is read from a config file
@@ -44,7 +44,7 @@ reimplement it standalone — no import of the main module):
 
 Standalone Go module `mcps/a2a` (module `github.com/benenen/myclaw/mcps/a2a`,
 `go 1.23.6`, `require github.com/modelcontextprotocol/go-sdk v0.8.0` — same as
-echo/ping/boo). Add `./mcps/a2a` to `go.work` and `mcp-a2a`/`test-mcps` targets to
+echo/ping/asd). Add `./mcps/a2a` to `go.work` and `mcp-a2a`/`test-mcps` targets to
 the `Makefile`.
 
 Files:
@@ -126,5 +126,5 @@ mcp.AddTool(server, &mcp.Tool{Name:"a2a_dispatch", Description:"Send a self-cont
   myclaw mcp add --name a2a --type stdio --command /usr/local/bin/a2a-mcp --args --config,/etc/a2a/servers.json
   myclaw mcp attach --bot <id> --server a2a
   ```
-- Lives alongside `mcps/echo|ping|boo`; only new `mcps/a2a/**` files are added,
+- Lives alongside `mcps/echo|ping|asd`; only new `mcps/a2a/**` files are added,
   plus one `go.work` line and the `Makefile` targets.
