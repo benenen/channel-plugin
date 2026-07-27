@@ -118,6 +118,21 @@ else
   log "Reusing existing env file $ENV_FILE"
 fi
 
+# ---- a2a source config ----------------------------------------------------
+# a2a-mcp resolves its dispatch targets from this file. The source `kind` was
+# renamed boo -> asd; an un-migrated file names a kind nothing dispatches to, so
+# a2a_list silently returns zero servers.
+A2A_CONFIG="$DATA_DIR/a2a-servers.json"
+if [ ! -f "$A2A_CONFIG" ]; then
+  log "Seeding a2a source config $A2A_CONFIG"
+  printf '[{"kind":"asd"}]\n' > "$A2A_CONFIG"
+elif grep -qE '"kind"[[:space:]]*:[[:space:]]*"boo"' "$A2A_CONFIG"; then
+  log "Migrating a2a source config $A2A_CONFIG (kind boo -> asd)"
+  cp -p "$A2A_CONFIG" "$A2A_CONFIG.bak-boo"
+  sed -i.tmp -E 's/("kind"[[:space:]]*:[[:space:]]*)"boo"/\1"asd"/g' "$A2A_CONFIG" && rm -f "$A2A_CONFIG.tmp"
+  warn "a2a sources migrated to kind=asd; the previous file is at $A2A_CONFIG.bak-boo"
+fi
+
 # ---- service manager detection --------------------------------------------
 if [ "$SERVICE" = "auto" ]; then
   if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then SERVICE="systemd"
